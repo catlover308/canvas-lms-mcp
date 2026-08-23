@@ -53,7 +53,11 @@ function buildInstitutionToolSet(clients: InstitutionClients): ToolDefinition[] 
       const institution = (params.institution as CanvasInstitution | undefined) ?? 'pasadena'
       const selected = toolSets.get(institution)?.get(pasadenaTool.name)
       if (!selected) throw new Error(`Unknown Canvas institution: ${String(institution)}`)
-      return selected.handler(params)
+      // The selector belongs to this adapter, not to Canvas. Several upstream
+      // write tools spread their remaining params into request bodies.
+      const canvasParams = { ...params }
+      delete canvasParams.institution
+      return selected.handler(canvasParams)
     },
   }))
 }

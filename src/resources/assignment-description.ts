@@ -6,6 +6,11 @@ import { RESOURCE_LABELS } from '../provenance/fields'
 import { fenceBlock, isProvenanceFencingEnabled } from '../provenance/markers'
 import { formatError } from '../tools'
 
+export interface AssignmentDescriptionResourceOptions {
+  name?: string
+  uriTemplate?: string
+}
+
 function fenceDescription(description: string): string {
   if (description.length === 0 || !isProvenanceFencingEnabled()) return description
   return fenceBlock(description, RESOURCE_LABELS.assignmentDescription)
@@ -14,20 +19,22 @@ function fenceDescription(description: string): string {
 export function registerAssignmentDescriptionResource(
   server: McpServer,
   canvas: CanvasClient,
+  options: AssignmentDescriptionResourceOptions = {},
 ): void {
-  const template = new ResourceTemplate(
-    'canvas://course/{courseId}/assignment/{assignmentId}/description',
-    { list: undefined },
-  )
+  const uriTemplate =
+    options.uriTemplate ?? 'canvas://course/{courseId}/assignment/{assignmentId}/description'
+  const template = new ResourceTemplate(uriTemplate, { list: undefined })
 
   server.registerResource(
-    'assignment-description',
+    options.name ?? 'assignment-description',
     template,
     { mimeType: 'text/html' },
     async (_uri, variables) => {
       const courseId = Number(variables.courseId)
       const assignmentId = Number(variables.assignmentId)
-      const uri = `canvas://course/${courseId}/assignment/${assignmentId}/description`
+      const uri = uriTemplate
+        .replace('{courseId}', String(variables.courseId))
+        .replace('{assignmentId}', String(variables.assignmentId))
       if (Number.isNaN(courseId) || Number.isNaN(assignmentId)) {
         return {
           contents: [{ uri, mimeType: 'text/plain', text: 'Invalid course or assignment ID' }],

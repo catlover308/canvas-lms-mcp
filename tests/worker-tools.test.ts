@@ -30,9 +30,12 @@ describe('multi-institution Worker tool registry', () => {
     })
     const pasadenaHealth = vi.spyOn(pasadena.users, 'getProfile').mockResolvedValue({ id: 1 })
     const canyonsHealth = vi.spyOn(canyons.users, 'getProfile').mockResolvedValue({ id: 2 })
+    const canyonsCreateAssignment = vi
+      .spyOn(canyons.assignments, 'create')
+      .mockResolvedValue({ id: 99, name: 'Essay' } as never)
 
     registerMultiInstitutionTools(server, { pasadena, canyons })
-    return { handlers, configs, pasadenaHealth, canyonsHealth }
+    return { handlers, configs, pasadenaHealth, canyonsHealth, canyonsCreateAssignment }
   }
 
   it('keeps one 165-tool registry and adds the institution selector to every schema', () => {
@@ -60,5 +63,14 @@ describe('multi-institution Worker tool registry', () => {
     await health!({ institution: 'canyons' })
     expect(pasadenaHealth).toHaveBeenCalledOnce()
     expect(canyonsHealth).toHaveBeenCalledOnce()
+  })
+
+  it('consumes the institution selector instead of leaking it into Canvas payloads', async () => {
+    const { handlers, canyonsCreateAssignment } = captureRegistry()
+    const createAssignment = handlers.get('create_assignment')
+    expect(createAssignment).toBeDefined()
+
+    await createAssignment!({ institution: 'canyons', course_id: 42, name: 'Essay' })
+    expect(canyonsCreateAssignment).toHaveBeenCalledWith(42, { name: 'Essay' })
   })
 })

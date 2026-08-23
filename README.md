@@ -13,6 +13,8 @@ MCP server for [Canvas LMS](https://www.instructure.com/canvas). Read courses, a
 
 165 tools across Canvas courses, assignments, submissions, gradebook history, rubrics, quizzes, New Quizzes (LTI), files, users, groups, enrollments, discussions, modules, pages, calendar, conversations, peer reviews, accounts, analytics, outcomes, grading standards, grade projection, link audit, accessibility audit, content exports, content migrations, quiz accommodations, appointment groups, student workflows, student search, dashboard, instructor attention workflows, and health checks. Three deployment modes: stdio, HTTP, and library import.
 
+This fork additionally ships a stateless Cloudflare Worker at `/mcp`, with Pasadena City College as the default institution and College of the Canyons selectable through every tool's `institution` argument. Canvas tokens are Worker secrets; the two Canvas origins are non-secret Wrangler variables. Run `scripts/deploy-worker-with-secrets.zsh` for the initial deployment.
+
 ## One-click install (Claude Desktop)
 
 1. **[Download `canvas-lms-mcp.mcpb`](https://github.com/bruchris/canvas-lms-mcp/releases/latest/download/canvas-lms-mcp.mcpb)** from the latest release.

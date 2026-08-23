@@ -3,6 +3,8 @@ import { createMcpHandler } from 'agents/mcp/server'
 import { version } from '../package.json'
 import { CanvasClient } from './canvas'
 import { registerCanvasResources } from './resources/canvas'
+import { registerInstitutionCanvasResources } from './resources/institutions'
+import { applyMcpRequestCompatibility, applyMcpResponseCompatibility } from './mcp-compat'
 import { registerMultiInstitutionTools } from './worker-tools'
 
 function normalizeCanvasBaseUrl(value: string): string {
@@ -16,7 +18,7 @@ function normalizeCanvasBaseUrl(value: string): string {
   return url.origin
 }
 
-function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
+export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
   if (!env.CANVAS_API_TOKEN) {
     throw new Error('CANVAS_API_TOKEN is not configured')
   }
@@ -35,19 +37,26 @@ function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
   const server = new McpServer({ name: 'canvas-lms-mcp', version })
 
   registerMultiInstitutionTools(server, { pasadena, canyons })
+  // Preserve the upstream Pasadena resource URIs and add explicit,
+  // institution-qualified resources for both Canvas origins.
   registerCanvasResources(server, pasadena)
+  registerInstitutionCanvasResources(server, { pasadena, canyons })
   return server
 }
 
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (url.pathname === '/health') {
-      return Response.json({
-        ok: true,
-        service: 'canvas-lms-mcp',
-        institutions: ['pasadena', 'canyons'],
-      })
+      const configured = Boolean(env.CANVAS_API_TOKEN && env.CANVAS_COC_API_TOKEN)
+      return Response.json(
+        {
+          ok: configured,
+          service: 'canvas-lms-mcp',
+          institutions: ['pasadena', 'canyons'],
+        },
+        { status: configured ? 200 : 503 },
+      )
     }
     if (url.pathname !== '/mcp') {
       return new Response('Not found', { status: 404 })
@@ -60,6 +69,8 @@ export default {
         console.error(JSON.stringify({ event: 'mcp_error', message: error.message }))
       },
     })
-    return handler(request, env, ctx)
+    const compatible = applyMcpRequestCompatibility(request)
+    const response = await handler(compatible.request, env, ctx)
+    return applyMcpResponseCompatibility(response, compatible.wantsJsonResponse)
   },
 } satisfies ExportedHandler<Cloudflare.Env>

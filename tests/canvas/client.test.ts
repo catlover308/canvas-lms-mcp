@@ -37,6 +37,8 @@ describe('CanvasHttpClient', () => {
           }),
         }),
       )
+      const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit
+      expect(new Headers(init.headers).has('accept')).toBe(false)
       expect(result).toEqual(mockResponse)
     })
 
@@ -89,17 +91,43 @@ describe('CanvasHttpClient', () => {
       ).resolves.toBeDefined()
     })
 
-    it('handles absolute URLs without prepending baseUrl', async () => {
+    it('allows same-origin absolute URLs without prepending baseUrl', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(JSON.stringify([]), { status: 200 }),
       )
 
-      await client.request('https://other.example.com/api/v1/courses')
+      await client.request('https://canvas.example.com/api/v1/courses')
 
       expect(fetch).toHaveBeenCalledWith(
-        'https://other.example.com/api/v1/courses',
+        'https://canvas.example.com/api/v1/courses',
         expect.anything(),
       )
+    })
+
+    it('never sends credentials or a caller-provided Accept header cross-origin', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+      await expect(
+        client.request('https://other.example.com/api/v1/courses', {
+          headers: { Accept: 'application/json' },
+        }),
+      ).rejects.toThrow('Refusing to send Canvas credentials to a different origin')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('removes a caller-provided Accept header from same-origin Canvas requests', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      )
+
+      await client.request('/api/v1/courses', {
+        headers: { Accept: 'application/json', 'X-Test': 'kept' },
+      })
+
+      const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit
+      const headers = new Headers(init.headers)
+      expect(headers.has('accept')).toBe(false)
+      expect(headers.get('x-test')).toBe('kept')
     })
 
     it('strips trailing slashes from baseUrl', async () => {
@@ -250,6 +278,22 @@ describe('CanvasHttpClient', () => {
           }),
         }),
       )
+      const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit
+      expect(new Headers(init.headers).has('accept')).toBe(false)
+    })
+
+    it('rejects a cross-origin pagination link before forwarding credentials', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify([{ id: 1 }]), {
+          status: 200,
+          headers: { Link: '<https://evil.example/api/v1/courses?page=2>; rel="next"' },
+        }),
+      )
+
+      await expect(client.paginate('/api/v1/courses')).rejects.toThrow(
+        'Refusing to send Canvas credentials to a different origin',
+      )
+      expect(fetch).toHaveBeenCalledTimes(1)
     })
 
     it('respects maxPaginationPages limit', async () => {
@@ -358,6 +402,16 @@ describe('CanvasHttpClient', () => {
       await expect(
         client.paginateEnvelope('/api/v1/quizzes/999/submissions', 'quiz_submissions'),
       ).rejects.toThrow(CanvasApiError)
+    })
+
+    it('does not send an Accept header on envelope pagination', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      )
+
+      await client.paginateEnvelope('/api/v1/items', 'items')
+      const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit
+      expect(new Headers(init.headers).has('accept')).toBe(false)
     })
   })
 

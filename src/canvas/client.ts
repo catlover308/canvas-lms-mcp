@@ -29,16 +29,46 @@ export interface CanvasRequestOptions extends RequestInit {
 export class CanvasHttpClient {
   private token: string
   private _baseUrl: string
+  private baseOrigin: string
   private maxPaginationPages: number
 
   constructor(config: CanvasClientConfig) {
     this.token = config.token
     this._baseUrl = config.baseUrl.replace(/\/+$/, '')
+    this.baseOrigin = new URL(this._baseUrl).origin
     this.maxPaginationPages = config.maxPaginationPages ?? DEFAULT_MAX_PAGINATION_PAGES
   }
 
   get baseUrl(): string {
     return this._baseUrl
+  }
+
+  private resolveAuthenticatedUrl(endpoint: string): string {
+    const url = /^https?:\/\//i.test(endpoint)
+      ? new URL(endpoint)
+      : new URL(`${this._baseUrl}/${endpoint.replace(/^\/+/, '')}`)
+    if (url.origin !== this.baseOrigin) {
+      throw new Error(`Refusing to send Canvas credentials to a different origin: ${url.origin}`)
+    }
+    return url.toString()
+  }
+
+  private authenticatedHeaders(initial?: HeadersInit, hasBody = false): Record<string, string> {
+    const custom = new Headers(initial)
+    custom.delete('accept')
+    custom.delete('authorization')
+    custom.delete('user-agent')
+
+    const contentType = custom.get('content-type')
+    custom.delete('content-type')
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      'User-Agent': USER_AGENT,
+    }
+    if (contentType !== null) headers['Content-Type'] = contentType
+    else if (hasBody) headers['Content-Type'] = 'application/json'
+    for (const [name, value] of custom) headers[name] = value
+    return headers
   }
 
   /**
@@ -48,7 +78,7 @@ export class CanvasHttpClient {
    */
   async request<T>(endpoint: string, options: CanvasRequestOptions = {}): Promise<T> {
     const { query, ...init } = options
-    let url = endpoint.startsWith('http') ? endpoint : `${this._baseUrl}${endpoint}`
+    let url = this.resolveAuthenticatedUrl(endpoint)
     if (query) {
       const parsed = new URL(url)
       appendCanvasQuery(parsed.searchParams, query)
@@ -62,20 +92,9 @@ export class CanvasHttpClient {
       )
     }
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
-      'User-Agent': USER_AGENT,
-    }
-    if (init.body) {
-      headers['Content-Type'] = 'application/json'
-    }
-
     const response = await fetch(url, {
       ...init,
-      headers: {
-        ...headers,
-        ...init.headers,
-      },
+      headers: this.authenticatedHeaders(init.headers, init.body != null),
     })
 
     if (!response.ok) {
@@ -93,7 +112,7 @@ export class CanvasHttpClient {
   }
 
   async paginate<T>(endpoint: string, params?: CanvasQueryParams): Promise<T[]> {
-    const url = new URL(`${this._baseUrl}${endpoint}`)
+    const url = new URL(this.resolveAuthenticatedUrl(endpoint))
     if (!url.searchParams.has('per_page')) {
       url.searchParams.set('per_page', '100')
     }
@@ -105,10 +124,7 @@ export class CanvasHttpClient {
 
     while (nextUrl && pages < this.maxPaginationPages) {
       const response = await fetch(nextUrl, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'User-Agent': USER_AGENT,
-        },
+        headers: this.authenticatedHeaders(),
       })
 
       if (!response.ok) {
@@ -133,7 +149,7 @@ export class CanvasHttpClient {
     envelopeKey: string,
     params?: CanvasQueryParams,
   ): Promise<T[]> {
-    const url = new URL(`${this._baseUrl}${endpoint}`)
+    const url = new URL(this.resolveAuthenticatedUrl(endpoint))
     if (!url.searchParams.has('per_page')) {
       url.searchParams.set('per_page', '100')
     }
@@ -145,10 +161,7 @@ export class CanvasHttpClient {
 
     while (nextUrl && pages < this.maxPaginationPages) {
       const response = await fetch(nextUrl, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'User-Agent': USER_AGENT,
-        },
+        headers: this.authenticatedHeaders(),
       })
 
       if (!response.ok) {
@@ -172,6 +185,7 @@ export class CanvasHttpClient {
   private parseNextLink(linkHeader: string | null): string | null {
     if (!linkHeader) return null
     const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-    return match?.[1] ?? null
+    if (!match?.[1]) return null
+    return this.resolveAuthenticatedUrl(match[1])
   }
 }

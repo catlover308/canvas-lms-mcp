@@ -6,27 +6,38 @@ import { RESOURCE_LABELS } from '../provenance/fields'
 import { fenceBlock, isProvenanceFencingEnabled } from '../provenance/markers'
 import { formatError } from '../tools'
 
+export interface SyllabusResourceOptions {
+  name?: string
+  uriTemplate?: string
+}
+
 function fenceSyllabus(body: string): string {
   if (body.length === 0 || !isProvenanceFencingEnabled()) return body
   return fenceBlock(body, RESOURCE_LABELS.syllabus)
 }
 
-export function registerSyllabusResource(server: McpServer, canvas: CanvasClient): void {
-  const template = new ResourceTemplate('canvas://course/{courseId}/syllabus', {
+export function registerSyllabusResource(
+  server: McpServer,
+  canvas: CanvasClient,
+  options: SyllabusResourceOptions = {},
+): void {
+  const uriTemplate = options.uriTemplate ?? 'canvas://course/{courseId}/syllabus'
+  const template = new ResourceTemplate(uriTemplate, {
     list: undefined,
   })
 
   server.registerResource(
-    'course-syllabus',
+    options.name ?? 'course-syllabus',
     template,
     { mimeType: 'text/html' },
     async (_uri, variables) => {
       const courseId = Number(variables.courseId)
+      const uri = uriTemplate.replace('{courseId}', String(variables.courseId))
       if (Number.isNaN(courseId)) {
         return {
           contents: [
             {
-              uri: `canvas://course/${variables.courseId}/syllabus`,
+              uri,
               mimeType: 'text/plain',
               text: 'Invalid course ID',
             },
@@ -38,7 +49,7 @@ export function registerSyllabusResource(server: McpServer, canvas: CanvasClient
         return {
           contents: [
             {
-              uri: `canvas://course/${courseId}/syllabus`,
+              uri: uriTemplate.replace('{courseId}', String(courseId)),
               mimeType: 'text/html',
               // Resources bypass buildHandler, so the fence is applied here
               // (BRU-2104 §8.2). Block form: the payload is text/html, with no
@@ -55,7 +66,7 @@ export function registerSyllabusResource(server: McpServer, canvas: CanvasClient
         return {
           contents: [
             {
-              uri: `canvas://course/${courseId}/syllabus`,
+              uri: uriTemplate.replace('{courseId}', String(courseId)),
               mimeType: 'text/plain',
               text: formatError(error),
             },
