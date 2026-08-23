@@ -4,6 +4,7 @@ import { version } from '../package.json'
 import { CanvasClient } from './canvas'
 import { registerCanvasResources } from './resources/canvas'
 import { registerInstitutionCanvasResources } from './resources/institutions'
+import { isAuthorizedMcpRequest, stripMcpAuthorization, unauthorizedMcpResponse } from './mcp-auth'
 import { applyMcpRequestCompatibility, applyMcpResponseCompatibility } from './mcp-compat'
 import { registerMultiInstitutionTools } from './worker-tools'
 
@@ -16,6 +17,19 @@ function normalizeCanvasBaseUrl(value: string): string {
     throw new Error('CANVAS_BASE_URL must be an origin without credentials, query, or fragment')
   }
   return url.origin
+}
+
+export function hasValidWorkerConfiguration(env: Cloudflare.Env): boolean {
+  if (!env.CANVAS_API_TOKEN || !env.CANVAS_COC_API_TOKEN || !env.MCP_ACCESS_TOKEN) {
+    return false
+  }
+  try {
+    normalizeCanvasBaseUrl(env.CANVAS_BASE_URL)
+    normalizeCanvasBaseUrl(env.CANVAS_COC_BASE_URL)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
@@ -48,7 +62,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (url.pathname === '/health') {
-      const configured = Boolean(env.CANVAS_API_TOKEN && env.CANVAS_COC_API_TOKEN)
+      const configured = hasValidWorkerConfiguration(env)
       return Response.json(
         {
           ok: configured,
@@ -61,6 +75,9 @@ export default {
     if (url.pathname !== '/mcp') {
       return new Response('Not found', { status: 404 })
     }
+    if (!(await isAuthorizedMcpRequest(request, env.MCP_ACCESS_TOKEN))) {
+      return unauthorizedMcpResponse()
+    }
 
     const handler = createMcpHandler(() => createCanvasWorkerServer(env), {
       route: '/mcp',
@@ -69,7 +86,7 @@ export default {
         console.error(JSON.stringify({ event: 'mcp_error', message: error.message }))
       },
     })
-    const compatible = applyMcpRequestCompatibility(request)
+    const compatible = applyMcpRequestCompatibility(stripMcpAuthorization(request))
     const response = await handler(compatible.request, env, ctx)
     return applyMcpResponseCompatibility(response, compatible.wantsJsonResponse)
   },

@@ -8,21 +8,35 @@ export interface McpRequestCompatibility {
 
 function acceptsMediaType(header: string, target: string): boolean {
   const [targetType, targetSubtype] = target.split('/')
+  let bestSpecificity = -1
+  let bestQuality = 0
 
-  return header.split(',').some((entry) => {
+  for (const entry of header.split(',')) {
     const [range = '', ...parameters] = entry.split(';')
     const mediaRange = range.trim().toLowerCase()
     const quality = parameters
       .map((parameter) => parameter.trim().match(/^q\s*=\s*(0(?:\.\d*)?|1(?:\.0*)?)$/i))
       .find((match) => match !== null)
-    if (quality && Number(quality[1]) === 0) return false
+    const qualityValue = quality ? Number(quality[1]) : 1
 
     const [type, subtype] = mediaRange.split('/')
-    return (
-      (type === '*' && subtype === '*') ||
-      (type === targetType && (subtype === '*' || subtype === targetSubtype))
-    )
-  })
+    const specificity =
+      type === targetType && subtype === targetSubtype
+        ? 2
+        : type === targetType && subtype === '*'
+          ? 1
+          : type === '*' && subtype === '*'
+            ? 0
+            : -1
+    if (specificity > bestSpecificity) {
+      bestSpecificity = specificity
+      bestQuality = qualityValue
+    } else if (specificity === bestSpecificity && qualityValue > bestQuality) {
+      bestQuality = qualityValue
+    }
+  }
+
+  return bestSpecificity >= 0 && bestQuality > 0
 }
 
 /**

@@ -51,6 +51,17 @@ describe('MCP HTTP compatibility', () => {
     expect(result.wantsJsonResponse).toBe(false)
   })
 
+  it('honors a specific q=0 exclusion over a wildcard', () => {
+    const jsonExcluded = applyMcpRequestCompatibility(request('application/json;q=0, */*;q=1'))
+    expect(jsonExcluded.request.headers.get('accept')).toBe('application/json, text/event-stream')
+    expect(jsonExcluded.wantsJsonResponse).toBe(false)
+
+    const bothExcluded = request('application/json;q=0, text/event-stream;q=0, */*;q=1')
+    const result = applyMcpRequestCompatibility(bothExcluded)
+    expect(result.request).toBe(bothExcluded)
+    expect(result.wantsJsonResponse).toBe(false)
+  })
+
   it('streams one stateless SSE message as JSON for JSON-only clients', async () => {
     const source = new ReadableStream<Uint8Array>({
       start(controller) {

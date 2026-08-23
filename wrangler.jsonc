@@ -15,6 +15,6 @@
     "CANVAS_COC_BASE_URL": "https://coc.instructure.com",
   },
   "secrets": {
-    "required": ["CANVAS_API_TOKEN", "CANVAS_COC_API_TOKEN"],
+    "required": ["CANVAS_API_TOKEN", "CANVAS_COC_API_TOKEN", "MCP_ACCESS_TOKEN"],
   },
 }
