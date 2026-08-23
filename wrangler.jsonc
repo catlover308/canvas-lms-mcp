@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "canvas-lms-mcp-worker",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "vars": {
+    "CANVAS_BASE_URL": "https://canvas.pasadena.edu",
+    "CANVAS_COC_BASE_URL": "https://coc.instructure.com",
+  },
+  "secrets": {
+    "required": ["CANVAS_API_TOKEN", "CANVAS_COC_API_TOKEN"],
+  },
+}

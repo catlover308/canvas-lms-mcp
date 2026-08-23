@@ -2,7 +2,7 @@
   "name": "canvas-lms-mcp",
   "version": "1.27.4",
   "mcpName": "io.github.bruchris/canvas-lms-mcp",
-  "description": "TypeScript MCP 1.x server for Canvas LMS — 165 tools across Canvas courses, assignments, grades, gradebook history, quizzes, New Quizzes (LTI), outcomes, discussions, admin workflows, and more.",
+  "description": "TypeScript MCP server for Canvas LMS — 165 tools across Canvas courses, assignments, grades, gradebook history, quizzes, New Quizzes (LTI), outcomes, discussions, admin workflows, and more.",
   "type": "module",
   "types": "./dist/server.d.ts",
   "exports": {
@@ -36,6 +36,10 @@
   ],
   "scripts": {
     "dev": "tsup --watch",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "types:worker": "wrangler types",
     "build": "tsup && tsc -p tsconfig.build.json",
     "generate:manifests": "tsx scripts/generate-manifests.ts",
     "mcpb:pack": "node scripts/pack-mcpb.mjs",
@@ -81,11 +85,15 @@
   "packageManager": "pnpm@10.11.0",
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.21.0",
     "prompts": "^2.4.2",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@modelcontextprotocol/client": "^2.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260823.1",
     "@eslint/js": "^10.0.1",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^25.9.3",
@@ -103,6 +111,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vite": "^8.1.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "4.125.0"
   }
 }

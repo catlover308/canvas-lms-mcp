@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 // Mock dependencies before importing handler
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: class {
+vi.mock('@modelcontextprotocol/node', () => ({
+  NodeStreamableHTTPServerTransport: class {
     async handleRequest() {}
     async close() {}
   },
@@ -332,8 +332,8 @@ describe('createHttpHandler', () => {
     })
 
     it('logs a cleanup failure on close without masking the already-sent response', async () => {
-      const { StreamableHTTPServerTransport } =
-        await import('@modelcontextprotocol/sdk/server/streamableHttp.js')
+      const { NodeStreamableHTTPServerTransport: StreamableHTTPServerTransport } =
+        await import('@modelcontextprotocol/node')
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const cleanupError = new Error('cleanup boom')
       const closeSpy = vi

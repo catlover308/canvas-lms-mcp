@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node'
 import { Pseudonymizer } from './pseudonym/pseudonymizer'
 import { createCanvasMCPServer } from './server'
 import { parseArgs } from './cli'
@@ -113,7 +113,7 @@ export function createHttpHandler(defaultConfig: {
     })
 
     try {
-      const transport = new StreamableHTTPServerTransport({
+      const transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       })
       await server.connect(transport)

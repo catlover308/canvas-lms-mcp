@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../../src/canvas'
 import { registerAllResources } from '../../src/resources'
 

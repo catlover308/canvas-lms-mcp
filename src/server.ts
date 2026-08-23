@@ -1,5 +1,5 @@
 import { version } from '../package.json'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { CanvasClient } from './canvas'
 import { Pseudonymizer } from './pseudonym/pseudonymizer'
 import { registerAllTools } from './tools'

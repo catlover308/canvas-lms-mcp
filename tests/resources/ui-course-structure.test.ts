@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { RESOURCE_MIME_TYPE } from '../../src/mcp-apps'
 import { registerCourseStructureUI } from '../../src/resources/ui-course-structure'
 

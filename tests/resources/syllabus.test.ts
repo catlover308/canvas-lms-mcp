@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../../src/canvas'
 import { CanvasApiError } from '../../src/canvas/client'
 import { MARKER_CLOSE, fenceBlock } from '../../src/provenance/markers'
@@ -21,9 +21,9 @@ describe('registerSyllabusResource', () => {
 
   function captureHandler(canvas: CanvasClient) {
     const server = new McpServer({ name: 'test', version: '1.0.0' })
-    const resourceSpy = vi.spyOn(server, 'resource')
+    const resourceSpy = vi.spyOn(server, 'registerResource')
     registerSyllabusResource(server, canvas)
-    // The handler is the last argument to server.resource()
+    // The handler is the last argument to server.registerResource().
     const call = resourceSpy.mock.calls[0]
     return call[call.length - 1] as (
       uri: unknown,

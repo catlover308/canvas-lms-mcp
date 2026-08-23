@@ -7,7 +7,7 @@
  *
  * Stays on SDK v1 throughout Phase 0. Retype against @modelcontextprotocol/server in Phase 1.
  */
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 
 export const RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app'
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../../src/canvas'
 import { UNTRUSTED_CONTENT_META_NOTE } from '../../src/provenance/apply'
 import { UNTRUSTED_FIELDS } from '../../src/provenance/fields'

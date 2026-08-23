@@ -12,7 +12,7 @@
  *     server.registerResource.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { registerAllTools } from '../src/tools'
 import { registerCourseStructureUI } from '../src/resources/ui-course-structure'
 import type { CanvasClient } from '../src/canvas'

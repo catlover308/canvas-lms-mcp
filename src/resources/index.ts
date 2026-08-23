@@ -1,13 +1,13 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../canvas'
-import { registerSyllabusResource } from './syllabus'
-import { registerAssignmentDescriptionResource } from './assignment-description'
+import { registerCanvasResources } from './canvas'
 import { registerCourseStructureUI } from './ui-course-structure'
 import { registerAccountNotificationsUI } from './ui-account-notifications'
 
+export { registerCanvasResources } from './canvas'
+
 export function registerAllResources(server: McpServer, canvas: CanvasClient): void {
-  registerSyllabusResource(server, canvas)
-  registerAssignmentDescriptionResource(server, canvas)
+  registerCanvasResources(server, canvas)
   registerCourseStructureUI(server)
   registerAccountNotificationsUI(server)
 }

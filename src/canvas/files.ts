@@ -15,6 +15,30 @@ function isTextContentType(contentType: string): boolean {
   return base.startsWith('text/') || TEXT_CONTENT_TYPES.has(base)
 }
 
+function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
+  const normalized = value.replace(/\s/g, '')
+  let binary: string
+  try {
+    binary = atob(normalized)
+  } catch {
+    throw new Error('Invalid base64 content: string is not valid base64 encoding')
+  }
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  if (encodeBase64(bytes).replace(/=+$/, '') !== normalized.replace(/=+$/, '')) {
+    throw new Error('Invalid base64 content: string is not valid base64 encoding')
+  }
+  return bytes
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 32_768
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
+}
+
 export class FilesModule {
   constructor(private client: CanvasHttpClient) {}
 
@@ -37,10 +61,7 @@ export class FilesModule {
     contentType: string,
     parentFolderPath?: string,
   ): Promise<CanvasFile> {
-    const content = Buffer.from(contentBase64, 'base64')
-    if (content.toString('base64') !== contentBase64) {
-      throw new Error('Invalid base64 content: string is not valid base64 encoding')
-    }
+    const content = decodeBase64(contentBase64)
 
     // Step 1: Notify Canvas of the pending upload
     const uploadBody: Record<string, string> = {
@@ -67,10 +88,7 @@ export class FilesModule {
     contentBase64: string,
     contentType: string,
   ): Promise<CanvasFile> {
-    const content = Buffer.from(contentBase64, 'base64')
-    if (content.toString('base64') !== contentBase64) {
-      throw new Error('Invalid base64 content: string is not valid base64 encoding')
-    }
+    const content = decodeBase64(contentBase64)
 
     const uploadInfo = await this.client.request<CanvasFileUploadInfo>(
       `/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self/files`,
@@ -210,7 +228,7 @@ export class FilesModule {
         filename,
         contentType,
         size: buffer.byteLength,
-        text: Buffer.from(buffer).toString('utf-8'),
+        text: new TextDecoder().decode(buffer),
       }
     }
 
@@ -219,7 +237,7 @@ export class FilesModule {
       filename,
       contentType,
       size: buffer.byteLength,
-      base64: Buffer.from(buffer).toString('base64'),
+      base64: encodeBase64(new Uint8Array(buffer)),
     }
   }
 

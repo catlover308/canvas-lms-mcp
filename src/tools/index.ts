@@ -1,4 +1,5 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
+import { z } from 'zod'
 import { registerAppTool } from '../mcp-apps'
 import type { CanvasClient } from '../canvas'
 import { CanvasApiError } from '../canvas/client'
@@ -117,16 +118,27 @@ export function registerAllTools(
   features?: ToolFeatureFlags,
 ): void {
   const tools = getAllTools(canvas, pseudonymizer, role, features)
+  registerToolDefinitions(server, tools, pseudonymizer, features)
+}
+
+/** Register a prepared tool set through the same validation and safety boundary. */
+export function registerToolDefinitions(
+  server: McpServer,
+  tools: ToolDefinition[],
+  pseudonymizer?: Pseudonymizer,
+  features?: ToolFeatureFlags,
+): void {
   for (const tool of tools) {
     const handler = buildHandler(tool, pseudonymizer)
-    if (tool.ui) {
+    const inputSchema = z.object(tool.inputSchema)
+    if (tool.ui && features?.mcpApps !== false) {
       registerAppTool(
         server,
         tool.name,
         {
           title: tool.title,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema,
           annotations: tool.annotations,
           _meta: { ui: { resourceUri: tool.ui.resourceUri } },
         },
@@ -138,7 +150,7 @@ export function registerAllTools(
         {
           title: tool.title,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema,
           annotations: tool.annotations,
         },
         handler,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { CanvasApiError } from '../../src/canvas/client'
 import { registerAllTools } from '../../src/tools'
 import type { CanvasClient } from '../../src/canvas'

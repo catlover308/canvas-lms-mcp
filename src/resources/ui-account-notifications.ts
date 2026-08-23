@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { registerAppResource, RESOURCE_MIME_TYPE } from '../mcp-apps'
 import { ACCOUNT_NOTIFICATIONS_HTML } from '../ui/account-notifications.html'
 

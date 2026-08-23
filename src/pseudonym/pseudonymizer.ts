@@ -23,7 +23,13 @@ import type {
   CanvasUser,
 } from '../canvas/types'
 import { isEnvTruthy } from '../env'
-import { conversationsFilePath, mapFilePath, normalizeHost, resolvePseudonymDir } from './paths'
+import {
+  conversationsFilePath,
+  mapFilePath,
+  normalizeHost,
+  resolvePseudonymDir,
+  type ResolvePathsEnv,
+} from './paths'
 import { classifyRole, shouldPseudonymize, type Role } from './roles'
 import {
   emptyConversationMap,
@@ -84,7 +90,8 @@ export class Pseudonymizer {
 
   constructor(config: PseudonymizerConfig) {
     this.host = normalizeHost(config.baseUrl)
-    this.rootDir = config.rootDir ?? resolvePseudonymDir({ env: config.env })
+    this.rootDir =
+      config.rootDir ?? resolvePseudonymDir({ env: config.env as ResolvePathsEnv | undefined })
     this.env = config.env ?? process.env
     this.auditLog = config.auditLog ?? ((line) => console.error(line))
   }

@@ -34,6 +34,8 @@ export interface ToolUiBinding {
 export interface ToolFeatureFlags {
   /** CANVAS_ENABLE_ASSIGNMENT_SUBMISSION / --enable-assignment-submission */
   assignmentSubmission?: boolean
+  /** Attach MCP Apps UI metadata. Set false for transports with no frontend. */
+  mcpApps?: boolean
 }
 
 export interface ToolDefinition {
