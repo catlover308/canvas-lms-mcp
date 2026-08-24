@@ -1,3 +1,5 @@
+import { oauthResourceMetadataUrl, OAUTH_SCOPE, verifyOAuthAccessToken } from './mcp-oauth'
+
 function readBearerToken(request: Request): string | null {
   const authorization = request.headers.get('authorization')
   const match = authorization?.match(/^Bearer\s+(.+)$/i)
@@ -24,10 +26,12 @@ async function constantTimeEqual(left: string, right: string): Promise<boolean> 
 export async function isAuthorizedMcpRequest(
   request: Request,
   expectedToken: string,
+  oauthSecret?: string,
 ): Promise<boolean> {
-  if (!expectedToken) return false
   const suppliedToken = readBearerToken(request)
-  return suppliedToken !== null && (await constantTimeEqual(suppliedToken, expectedToken))
+  if (suppliedToken === null) return false
+  if (expectedToken && (await constantTimeEqual(suppliedToken, expectedToken))) return true
+  return Boolean(oauthSecret && (await verifyOAuthAccessToken(suppliedToken, oauthSecret)))
 }
 
 /** Remove the MCP credential before handing the request to third-party code. */
@@ -47,7 +51,7 @@ export function unauthorizedMcpResponse(): Response {
       status: 401,
       headers: {
         'Cache-Control': 'no-store',
-        'WWW-Authenticate': 'Bearer realm="canvas-lms-mcp"',
+        'WWW-Authenticate': `Bearer resource_metadata="${oauthResourceMetadataUrl()}", scope="${OAUTH_SCOPE}"`,
       },
     },
   )

@@ -6,6 +6,7 @@ import { registerCanvasResources } from './resources/canvas'
 import { registerInstitutionCanvasResources } from './resources/institutions'
 import { isAuthorizedMcpRequest, stripMcpAuthorization, unauthorizedMcpResponse } from './mcp-auth'
 import { applyMcpRequestCompatibility, applyMcpResponseCompatibility } from './mcp-compat'
+import { handleOAuthRequest } from './mcp-oauth'
 import { registerMultiInstitutionTools } from './worker-tools'
 
 type OptionalCanyonsSecret = Partial<Record<'CANVAS_COC_API_TOKEN', string>>
@@ -27,7 +28,12 @@ function normalizeCanvasBaseUrl(value: string): string {
 }
 
 export function hasValidWorkerConfiguration(env: Cloudflare.Env): boolean {
-  if (!env.CANVAS_API_TOKEN || !env.MCP_ACCESS_TOKEN) {
+  if (
+    !env.CANVAS_API_TOKEN ||
+    !env.MCP_ACCESS_TOKEN ||
+    !env.OWNER_SECRET ||
+    env.OWNER_SECRET.length < 32
+  ) {
     return false
   }
   try {
@@ -67,12 +73,19 @@ export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
+    if (url.hostname === 'canvas-mcp.brycel.net') {
+      url.hostname = 'canvas-mcp-cf.brycel.net'
+      return Response.redirect(url.toString(), 308)
+    }
+    const oauthResponse = await handleOAuthRequest(request, env)
+    if (oauthResponse) return oauthResponse
     if (url.pathname === '/health') {
       const configured = hasValidWorkerConfiguration(env)
       return Response.json(
         {
           ok: configured,
           service: 'canvas-lms-mcp',
+          oauth: env.OWNER_SECRET?.length >= 32 ? 'configured' : 'unavailable',
           institutions: {
             pasadena: env.CANVAS_API_TOKEN ? 'configured' : 'unavailable',
             canyons: readCanyonsToken(env) ? 'configured' : 'dormant',
@@ -84,7 +97,7 @@ export default {
     if (url.pathname !== '/mcp') {
       return new Response('Not found', { status: 404 })
     }
-    if (!(await isAuthorizedMcpRequest(request, env.MCP_ACCESS_TOKEN))) {
+    if (!(await isAuthorizedMcpRequest(request, env.MCP_ACCESS_TOKEN, env.OWNER_SECRET))) {
       return unauthorizedMcpResponse()
     }
 

@@ -5,6 +5,7 @@ const validEnv = {
   CANVAS_API_TOKEN: 'pasadena-token',
   CANVAS_COC_API_TOKEN: 'canyons-token',
   MCP_ACCESS_TOKEN: 'mcp-token',
+  OWNER_SECRET: 'owner-secret-that-is-at-least-32-characters',
   CANVAS_BASE_URL: 'https://canvas.pasadena.edu',
   CANVAS_COC_BASE_URL: 'https://coc.instructure.com',
 } as Cloudflare.Env
@@ -21,6 +22,7 @@ describe('Worker health configuration', () => {
   it.each([
     { ...validEnv, CANVAS_API_TOKEN: '' },
     { ...validEnv, MCP_ACCESS_TOKEN: '' },
+    { ...validEnv, OWNER_SECRET: 'too-short' },
     { ...validEnv, CANVAS_BASE_URL: 'not-a-url' },
     { ...validEnv, CANVAS_COC_BASE_URL: 'https://coc.instructure.com?token=bad' },
     { ...validEnv, CANVAS_BASE_URL: 'https://user:pass@canvas.pasadena.edu' },
