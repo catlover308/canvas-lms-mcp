@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleOAuthRequest, MCP_RESOURCE, verifyOAuthAccessToken } from '../src/mcp-oauth'
 
 const OWNER_SECRET = 'owner-secret-that-is-at-least-32-characters'
@@ -70,6 +70,38 @@ async function authorize(clientId: string): Promise<{ code: string; cookie: stri
 }
 
 describe('stateless OAuth server', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('fetches ChatGPT CIMD metadata without following redirects', async () => {
+    const clientId = 'https://chatgpt.com/oauth/test-client/client.json'
+    const redirectUri = 'https://chatgpt.com/connector/oauth/test-client'
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        client_id: clientId,
+        client_name: 'ChatGPT',
+        redirect_uris: [redirectUri],
+      }),
+    )
+    const url = new URL('https://canvas-mcp-cf.brycel.net/authorize')
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: MCP_RESOURCE,
+      scope: 'canvas.mcp',
+    }).toString()
+
+    const response = await handleOAuthRequest(new Request(url), env)
+
+    expect(response?.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(clientId),
+      expect.objectContaining({ redirect: 'manual' }),
+    )
+  })
+
   it('publishes OAuth 2.1 discovery metadata', async () => {
     const resource = await handleOAuthRequest(
       new Request('https://canvas-mcp-cf.brycel.net/.well-known/oauth-protected-resource/mcp'),

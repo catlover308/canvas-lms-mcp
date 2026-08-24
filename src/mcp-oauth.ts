@@ -401,7 +401,9 @@ async function resolveCimdClient(clientId: string): Promise<ResolvedClient | nul
   }
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
-    redirect: 'error',
+    // Workers only implements follow/manual. Manual preserves the same
+    // fail-closed behavior because readBoundedJsonResponse rejects 3xx.
+    redirect: 'manual',
   })
   const metadata = await readBoundedJsonResponse(response)
   if (!metadata || metadata.client_id !== clientId) return null
