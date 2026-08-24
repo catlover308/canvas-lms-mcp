@@ -12,7 +12,7 @@ import {
 import { isProvenanceFencingEnabled, markerRejectionMessage } from '../provenance/markers'
 import type { CanvasRole, ToolDefinition, ToolFeatureFlags } from './types'
 import { toolDomainCatalog } from './catalog'
-import { formatError } from './errors'
+import { formatError, ToolUnavailableError } from './errors'
 import { pseudonymTools } from './pseudonym'
 import { isVisibleForRole, tagAudience } from './roles'
 import { tagTitle } from './titles'
@@ -99,7 +99,7 @@ function buildHandler(
       }
       return response
     } catch (error) {
-      if (!(error instanceof CanvasApiError)) {
+      if (!(error instanceof CanvasApiError) && !(error instanceof ToolUnavailableError)) {
         console.error(`Unexpected error in tool "${tool.name}":`, error)
       }
       return {
@@ -158,4 +158,4 @@ export function registerToolDefinitions(
     }
   }
 }
-export { formatError } from './errors'
+export { formatError, ToolUnavailableError } from './errors'

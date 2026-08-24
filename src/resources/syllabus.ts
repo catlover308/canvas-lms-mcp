@@ -2,6 +2,7 @@ import { ResourceTemplate } from '@modelcontextprotocol/server'
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../canvas'
 import { CanvasApiError } from '../canvas/client'
+import { CANYONS_NOT_CONFIGURED_MESSAGE } from '../institutions'
 import { RESOURCE_LABELS } from '../provenance/fields'
 import { fenceBlock, isProvenanceFencingEnabled } from '../provenance/markers'
 import { formatError } from '../tools'
@@ -18,7 +19,7 @@ function fenceSyllabus(body: string): string {
 
 export function registerSyllabusResource(
   server: McpServer,
-  canvas: CanvasClient,
+  canvas: CanvasClient | undefined,
   options: SyllabusResourceOptions = {},
 ): void {
   const uriTemplate = options.uriTemplate ?? 'canvas://course/{courseId}/syllabus'
@@ -40,6 +41,17 @@ export function registerSyllabusResource(
               uri,
               mimeType: 'text/plain',
               text: 'Invalid course ID',
+            },
+          ],
+        }
+      }
+      if (!canvas) {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/plain',
+              text: CANYONS_NOT_CONFIGURED_MESSAGE,
             },
           ],
         }

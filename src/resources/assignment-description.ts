@@ -2,6 +2,7 @@ import { ResourceTemplate } from '@modelcontextprotocol/server'
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { CanvasClient } from '../canvas'
 import { CanvasApiError } from '../canvas/client'
+import { CANYONS_NOT_CONFIGURED_MESSAGE } from '../institutions'
 import { RESOURCE_LABELS } from '../provenance/fields'
 import { fenceBlock, isProvenanceFencingEnabled } from '../provenance/markers'
 import { formatError } from '../tools'
@@ -18,7 +19,7 @@ function fenceDescription(description: string): string {
 
 export function registerAssignmentDescriptionResource(
   server: McpServer,
-  canvas: CanvasClient,
+  canvas: CanvasClient | undefined,
   options: AssignmentDescriptionResourceOptions = {},
 ): void {
   const uriTemplate =
@@ -38,6 +39,17 @@ export function registerAssignmentDescriptionResource(
       if (Number.isNaN(courseId) || Number.isNaN(assignmentId)) {
         return {
           contents: [{ uri, mimeType: 'text/plain', text: 'Invalid course or assignment ID' }],
+        }
+      }
+      if (!canvas) {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/plain',
+              text: CANYONS_NOT_CONFIGURED_MESSAGE,
+            },
+          ],
         }
       }
       try {

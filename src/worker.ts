@@ -8,6 +8,13 @@ import { isAuthorizedMcpRequest, stripMcpAuthorization, unauthorizedMcpResponse 
 import { applyMcpRequestCompatibility, applyMcpResponseCompatibility } from './mcp-compat'
 import { registerMultiInstitutionTools } from './worker-tools'
 
+type OptionalCanyonsSecret = Partial<Record<'CANVAS_COC_API_TOKEN', string>>
+
+function readCanyonsToken(env: Cloudflare.Env): string | undefined {
+  const token = (env as Cloudflare.Env & OptionalCanyonsSecret).CANVAS_COC_API_TOKEN
+  return token?.trim() || undefined
+}
+
 function normalizeCanvasBaseUrl(value: string): string {
   const url = new URL(value)
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -20,7 +27,7 @@ function normalizeCanvasBaseUrl(value: string): string {
 }
 
 export function hasValidWorkerConfiguration(env: Cloudflare.Env): boolean {
-  if (!env.CANVAS_API_TOKEN || !env.CANVAS_COC_API_TOKEN || !env.MCP_ACCESS_TOKEN) {
+  if (!env.CANVAS_API_TOKEN || !env.MCP_ACCESS_TOKEN) {
     return false
   }
   try {
@@ -36,18 +43,17 @@ export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
   if (!env.CANVAS_API_TOKEN) {
     throw new Error('CANVAS_API_TOKEN is not configured')
   }
-  if (!env.CANVAS_COC_API_TOKEN) {
-    throw new Error('CANVAS_COC_API_TOKEN is not configured')
-  }
-
   const pasadena = new CanvasClient({
     token: env.CANVAS_API_TOKEN,
     baseUrl: normalizeCanvasBaseUrl(env.CANVAS_BASE_URL),
   })
-  const canyons = new CanvasClient({
-    token: env.CANVAS_COC_API_TOKEN,
-    baseUrl: normalizeCanvasBaseUrl(env.CANVAS_COC_BASE_URL),
-  })
+  const canyonsToken = readCanyonsToken(env)
+  const canyons = canyonsToken
+    ? new CanvasClient({
+        token: canyonsToken,
+        baseUrl: normalizeCanvasBaseUrl(env.CANVAS_COC_BASE_URL),
+      })
+    : undefined
   const server = new McpServer({ name: 'canvas-lms-mcp', version })
 
   registerMultiInstitutionTools(server, { pasadena, canyons })
@@ -67,7 +73,10 @@ export default {
         {
           ok: configured,
           service: 'canvas-lms-mcp',
-          institutions: ['pasadena', 'canyons'],
+          institutions: {
+            pasadena: env.CANVAS_API_TOKEN ? 'configured' : 'unavailable',
+            canyons: readCanyonsToken(env) ? 'configured' : 'dormant',
+          },
         },
         { status: configured ? 200 : 503 },
       )

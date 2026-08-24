@@ -14,9 +14,12 @@ describe('Worker health configuration', () => {
     expect(hasValidWorkerConfiguration(validEnv)).toBe(true)
   })
 
+  it('accepts a deliberately dormant Canyons integration', () => {
+    expect(hasValidWorkerConfiguration({ ...validEnv, CANVAS_COC_API_TOKEN: '' })).toBe(true)
+  })
+
   it.each([
     { ...validEnv, CANVAS_API_TOKEN: '' },
-    { ...validEnv, CANVAS_COC_API_TOKEN: '' },
     { ...validEnv, MCP_ACCESS_TOKEN: '' },
     { ...validEnv, CANVAS_BASE_URL: 'not-a-url' },
     { ...validEnv, CANVAS_COC_BASE_URL: 'https://coc.instructure.com?token=bad' },

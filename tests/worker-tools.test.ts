@@ -73,4 +73,24 @@ describe('multi-institution Worker tool registry', () => {
     await createAssignment!({ institution: 'canyons', course_id: 42, name: 'Essay' })
     expect(canyonsCreateAssignment).toHaveBeenCalledWith(42, { name: 'Essay' })
   })
+
+  it('keeps all tools discoverable and returns an explicit error while Canyons is dormant', async () => {
+    const handlers = new Map<string, (params: Record<string, unknown>) => Promise<ToolResponse>>()
+    const server = {
+      registerTool: (name: string, _config: unknown, handler: unknown) => {
+        handlers.set(name, handler as (params: Record<string, unknown>) => Promise<ToolResponse>)
+      },
+    } as unknown as McpServer
+    const pasadena = new CanvasClient({
+      token: 'pasadena-token',
+      baseUrl: 'https://canvas.pasadena.edu',
+    })
+
+    registerMultiInstitutionTools(server, { pasadena })
+
+    expect(handlers.size).toBe(165)
+    const result = await handlers.get('health_check')!({ institution: 'canyons' })
+    expect(result.isError).toBe(true)
+    expect(result.content[0]?.text).toContain('Canyons Canvas is dormant')
+  })
 })

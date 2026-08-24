@@ -48,4 +48,20 @@ describe('institution-qualified Canvas resources', () => {
     expect(pasadena.courses.getSyllabus).not.toHaveBeenCalled()
     expect(result.contents[0]?.uri).toBe('canvas://canyons/course/7/syllabus')
   })
+
+  it('keeps Canyons resources discoverable with an explicit dormant response', async () => {
+    const server = new McpServer({ name: 'test', version: '1.0.0' })
+    const spy = vi.spyOn(server, 'registerResource')
+
+    registerInstitutionCanvasResources(server, { pasadena: mockCanvas() })
+
+    expect(spy).toHaveBeenCalledTimes(4)
+    const registration = spy.mock.calls.find((call) => call[0] === 'canyons-course-syllabus')
+    const handler = registration?.at(-1) as (
+      uri: URL,
+      variables: Record<string, string>,
+    ) => Promise<{ contents: Array<{ text: string }> }>
+    const result = await handler(new URL('canvas://canyons/course/7/syllabus'), { courseId: '7' })
+    expect(result.contents[0]?.text).toContain('Canyons Canvas is dormant')
+  })
 })

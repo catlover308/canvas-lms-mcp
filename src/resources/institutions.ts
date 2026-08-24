@@ -5,7 +5,7 @@ import { registerSyllabusResource } from './syllabus'
 
 export interface InstitutionResourceClients {
   pasadena: CanvasClient
-  canyons: CanvasClient
+  canyons?: CanvasClient
 }
 
 /** Register explicit resource URIs without changing the upstream Pasadena defaults. */

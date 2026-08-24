@@ -1,11 +1,24 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "canvas-lms-mcp-worker",
+  "name": "canvas-mcp-staging",
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-23",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "canvas-mcp-cf.brycel.net",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "canvas-mcp.brycel.net",
+      "custom_domain": true,
+    },
+  ],
+  "triggers": {
+    "crons": [],
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -15,6 +28,6 @@
     "CANVAS_COC_BASE_URL": "https://coc.instructure.com",
   },
   "secrets": {
-    "required": ["CANVAS_API_TOKEN", "CANVAS_COC_API_TOKEN", "MCP_ACCESS_TOKEN"],
+    "required": ["CANVAS_API_TOKEN", "MCP_ACCESS_TOKEN"],
   },
 }

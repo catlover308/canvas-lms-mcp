@@ -1,15 +1,17 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import type { CanvasClient } from './canvas'
-import { getAllTools, registerToolDefinitions } from './tools'
+import {
+  CANVAS_INSTITUTIONS,
+  CANYONS_NOT_CONFIGURED_MESSAGE,
+  type CanvasInstitution,
+} from './institutions'
+import { getAllTools, registerToolDefinitions, ToolUnavailableError } from './tools'
 import type { ToolDefinition } from './tools/types'
-
-export const CANVAS_INSTITUTIONS = ['pasadena', 'canyons'] as const
-export type CanvasInstitution = (typeof CANVAS_INSTITUTIONS)[number]
 
 export interface InstitutionClients {
   pasadena: CanvasClient
-  canyons: CanvasClient
+  canyons?: CanvasClient
 }
 
 const INSTITUTION_SCHEMA = z
@@ -24,7 +26,9 @@ function buildInstitutionToolSet(clients: InstitutionClients): ToolDefinition[] 
   const toolSets = new Map<CanvasInstitution, Map<string, ToolDefinition>>()
 
   for (const institution of CANVAS_INSTITUTIONS) {
-    const definitions = getAllTools(clients[institution], undefined, undefined, features)
+    const client = clients[institution]
+    if (!client) continue
+    const definitions = getAllTools(client, undefined, undefined, features)
     toolSets.set(institution, new Map(definitions.map((tool) => [tool.name, tool])))
   }
 
@@ -32,6 +36,7 @@ function buildInstitutionToolSet(clients: InstitutionClients): ToolDefinition[] 
   if (!pasadenaTools) throw new Error('Pasadena tool registry was not created')
 
   for (const institution of CANVAS_INSTITUTIONS) {
+    if (!clients[institution]) continue
     const names = toolSets.get(institution)
     if (!names || names.size !== pasadenaTools.size) {
       throw new Error(`Canvas tool registry mismatch for ${institution}`)
@@ -51,6 +56,9 @@ function buildInstitutionToolSet(clients: InstitutionClients): ToolDefinition[] 
     ui: undefined,
     handler: async (params) => {
       const institution = (params.institution as CanvasInstitution | undefined) ?? 'pasadena'
+      if (institution === 'canyons' && !clients.canyons) {
+        throw new ToolUnavailableError(CANYONS_NOT_CONFIGURED_MESSAGE)
+      }
       const selected = toolSets.get(institution)?.get(pasadenaTool.name)
       if (!selected) throw new Error(`Unknown Canvas institution: ${String(institution)}`)
       // The selector belongs to this adapter, not to Canvas. Several upstream

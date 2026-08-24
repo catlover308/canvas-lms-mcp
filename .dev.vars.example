@@ -1,3 +1,4 @@
 CANVAS_API_TOKEN=pasadena-token-for-local-development
-CANVAS_COC_API_TOKEN=canyons-token-for-local-development
+# Optional until College of the Canyons permits token creation:
+# CANVAS_COC_API_TOKEN=canyons-token-for-local-development
 MCP_ACCESS_TOKEN=separate-high-entropy-client-access-token

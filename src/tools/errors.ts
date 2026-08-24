@@ -1,5 +1,8 @@
 import { CanvasApiError } from '../canvas/client'
 
+/** An expected, sanitized configuration error that should not be logged as a server fault. */
+export class ToolUnavailableError extends Error {}
+
 export function formatError(error: unknown): string {
   if (error instanceof CanvasApiError) {
     const status = error.status
