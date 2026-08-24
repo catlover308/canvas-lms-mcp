@@ -1,4 +1,5 @@
 const CANONICAL_ORIGIN = 'https://canvas-mcp-cf.brycel.net'
+const LEGACY_ORIGIN = 'https://canvas-mcp.brycel.net'
 export const MCP_RESOURCE = `${CANONICAL_ORIGIN}/mcp`
 export const OAUTH_SCOPE = 'canvas.mcp'
 const OPTIONAL_OFFLINE_SCOPE = 'offline_access'
@@ -267,8 +268,9 @@ function isValidRedirectUri(value: string): boolean {
   }
 }
 
-function validResource(value: string): boolean {
-  return value === MCP_RESOURCE
+function canonicalResource(value: string): string | null {
+  if (value === MCP_RESOURCE || value === `${LEGACY_ORIGIN}/mcp`) return MCP_RESOURCE
+  return null
 }
 
 function normalizeScope(value: string | null): string | null {
@@ -414,10 +416,29 @@ async function resolveCimdClient(clientId: string): Promise<ResolvedClient | nul
   return { clientId, clientName, redirectUris }
 }
 
-async function resolveClient(clientId: string, secret: string): Promise<ResolvedClient | null> {
+function isChatGptConnectorRedirectUri(value: string): boolean {
+  if (!isValidRedirectUri(value)) return false
+  const url = new URL(value)
+  return url.origin === 'https://chatgpt.com' && url.pathname.startsWith('/connector/oauth/')
+}
+
+function resolveChatGptOpaqueClient(clientId: string, redirectUri: string): ResolvedClient | null {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+    return null
+  }
+  if (!isChatGptConnectorRedirectUri(redirectUri)) return null
+  return { clientId, clientName: 'ChatGPT', redirectUris: [redirectUri] }
+}
+
+async function resolveClient(
+  clientId: string,
+  secret: string,
+  redirectUri: string,
+): Promise<ResolvedClient | null> {
   if (clientId.startsWith('https://')) return resolveCimdClient(clientId)
   const payload = await verifyToken<RegisteredClientPayload>(clientId, 'client', secret)
-  if (!payload || payload.clientName.length > 200) return null
+  if (!payload) return resolveChatGptOpaqueClient(clientId, redirectUri)
+  if (payload.clientName.length > 200) return null
   const redirectUris = validateRedirectUris(payload.redirectUris)
   if (!redirectUris) return null
   return { clientId, clientName: payload.clientName, redirectUris }
@@ -500,7 +521,7 @@ async function authorizeGet(request: Request, secret: string): Promise<Response>
   const clientId = params.get('client_id') ?? ''
   const redirectUri = params.get('redirect_uri') ?? ''
   const state = params.get('state')
-  const client = await resolveClient(clientId, secret)
+  const client = await resolveClient(clientId, secret, redirectUri)
   if (!client) return oauthError('invalid_request', 'Unknown OAuth client.')
   if (!client.redirectUris.includes(redirectUri)) {
     return oauthError('invalid_request', 'Unregistered redirect URI.')
@@ -512,8 +533,8 @@ async function authorizeGet(request: Request, secret: string): Promise<Response>
   if (!/^[A-Za-z0-9_-]{43}$/.test(challenge)) {
     return oauthError('invalid_request', 'A valid S256 code challenge is required.')
   }
-  const resource = params.get('resource') ?? MCP_RESOURCE
-  if (!validResource(resource))
+  const resource = canonicalResource(params.get('resource') ?? MCP_RESOURCE)
+  if (!resource)
     return oauthError('invalid_target', 'The resource must be this MCP server.')
   const scope = normalizeScope(params.get('scope'))
   if (!scope) return oauthError('invalid_scope', 'Unsupported OAuth scope.')
@@ -666,8 +687,8 @@ async function exchangeToken(request: Request, secret: string): Promise<Response
     ) {
       return oauthError('invalid_grant', 'Authorization code is invalid or expired.')
     }
-    const resource = params.get('resource') ?? code.resource
-    if (resource !== code.resource || !validResource(resource)) {
+    const resource = canonicalResource(params.get('resource') ?? code.resource)
+    if (resource !== code.resource) {
       return oauthError('invalid_target', 'The resource must be the one authorized.')
     }
     return issueTokens(clientId, resource, code.scope, secret)
@@ -681,8 +702,8 @@ async function exchangeToken(request: Request, secret: string): Promise<Response
     if (!refresh || refresh.clientId !== clientId) {
       return oauthError('invalid_grant', 'Refresh token is invalid or expired.', 401)
     }
-    const resource = params.get('resource') ?? refresh.resource
-    if (resource !== refresh.resource || !validResource(resource)) {
+    const resource = canonicalResource(params.get('resource') ?? refresh.resource)
+    if (resource !== refresh.resource) {
       return oauthError('invalid_target', 'The resource must be the one authorized.')
     }
     if (params.has('scope') && normalizeScope(params.get('scope')) !== refresh.scope) {

@@ -102,6 +102,85 @@ describe('stateless OAuth server', () => {
     )
   })
 
+  it('accepts ChatGPT opaque client IDs with connector redirect URIs', async () => {
+    const clientId = '0c5e4754-2ef5-4ff0-8f0a-9bc82d06f6ec'
+    const redirectUri = 'https://chatgpt.com/connector/oauth/AFjf7ta-WJRc'
+    const url = new URL('https://canvas-mcp-cf.brycel.net/authorize')
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: 'https://canvas-mcp.brycel.net/mcp',
+      scope: 'canvas.mcp',
+    }).toString()
+
+    const response = await handleOAuthRequest(new Request(url), env)
+
+    expect(response?.status).toBe(200)
+    expect(await response?.text()).toContain('ChatGPT')
+  })
+
+  it('canonicalizes the legacy resource alias during token exchange', async () => {
+    const clientId = '0c5e4754-2ef5-4ff0-8f0a-9bc82d06f6ec'
+    const redirectUri = 'https://chatgpt.com/connector/oauth/AFjf7ta-WJRc'
+    const url = new URL('https://canvas-mcp-cf.brycel.net/authorize')
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: 'https://canvas-mcp.brycel.net/mcp',
+      scope: 'canvas.mcp',
+      state: 'legacy-resource-state',
+    }).toString()
+    const page = await handleOAuthRequest(new Request(url), env)
+    expect(page?.status).toBe(200)
+    const html = await page!.text()
+    const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
+    const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
+    const cookie = page!.headers.get('set-cookie')!.split(';', 1)[0]!
+
+    const approval = await handleOAuthRequest(
+      new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: cookie,
+        },
+        body: new URLSearchParams({
+          consent_token: consentToken!,
+          csrf: csrf!,
+          owner_secret: OWNER_SECRET,
+        }),
+      }),
+      env,
+    )
+    expect(approval?.status).toBe(302)
+    const callback = new URL(approval!.headers.get('location')!)
+    const token = await handleOAuthRequest(
+      new Request('https://canvas-mcp-cf.brycel.net/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          code: callback.searchParams.get('code')!,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+          resource: 'https://canvas-mcp.brycel.net/mcp',
+        }),
+      }),
+      env,
+    )
+    const issued = (await token?.json()) as { access_token: string }
+
+    expect(token?.status).toBe(200)
+    expect(await verifyOAuthAccessToken(issued.access_token, OWNER_SECRET)).toBe(true)
+  })
+
   it('publishes OAuth 2.1 discovery metadata', async () => {
     const resource = await handleOAuthRequest(
       new Request('https://canvas-mcp-cf.brycel.net/.well-known/oauth-protected-resource/mcp'),
