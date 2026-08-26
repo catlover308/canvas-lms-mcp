@@ -181,7 +181,7 @@ describe('stateless OAuth server', () => {
     expect(await verifyOAuthAccessToken(issued.access_token, OWNER_SECRET)).toBe(true)
   })
 
-  it('accepts consent approval without cookies and rejects cross-origin approval', async () => {
+  it('rejects a tampered CSRF value without relying on browser headers or cookies', async () => {
     const clientId = await register()
     const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
     url.search = new URLSearchParams({
@@ -197,27 +197,22 @@ describe('stateless OAuth server', () => {
     const html = await page!.text()
     const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
     const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
-    const body = new URLSearchParams({
-      consent_token: consentToken!,
-      csrf: csrf!,
-      owner_secret: OWNER_SECRET,
-    })
-
     const rejected = await handleOAuthRequest(
       new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Origin: 'https://attacker.example',
-        },
-        body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          consent_token: consentToken!,
+          csrf: `${csrf!}tampered`,
+          owner_secret: OWNER_SECRET,
+        }),
       }),
       env,
     )
     expect(rejected?.status).toBe(400)
     expect(await rejected?.json()).toMatchObject({
       error: 'invalid_request',
-      error_description: 'Authorization request origin is invalid.',
+      error_description: 'Authorization session is invalid or expired.',
     })
   })
 
