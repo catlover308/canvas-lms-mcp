@@ -216,6 +216,83 @@ describe('stateless OAuth server', () => {
     })
   })
 
+  it.each(['https://canvas-mcp-cf.brycel.net', 'https://canvas-mcp.brycel.net', 'null'])(
+    'accepts the signed consent form from supported origin %s',
+    async (origin) => {
+      const clientId = await register()
+      const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
+      url.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        resource: MCP_RESOURCE,
+        scope: 'canvas.mcp',
+      }).toString()
+      const page = await handleOAuthRequest(new Request(url), env)
+      const html = await page!.text()
+      const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
+      const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
+
+      const approval = await handleOAuthRequest(
+        new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: origin,
+          },
+          body: new URLSearchParams({
+            consent_token: consentToken!,
+            csrf: csrf!,
+            owner_secret: OWNER_SECRET,
+          }),
+        }),
+        env,
+      )
+      expect(approval?.status).toBe(302)
+    },
+  )
+
+  it('rejects a third-party authorization form origin', async () => {
+    const clientId = await register()
+    const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: MCP_RESOURCE,
+      scope: 'canvas.mcp',
+    }).toString()
+    const page = await handleOAuthRequest(new Request(url), env)
+    const html = await page!.text()
+    const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
+    const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
+
+    const rejected = await handleOAuthRequest(
+      new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://attacker.example',
+        },
+        body: new URLSearchParams({
+          consent_token: consentToken!,
+          csrf: csrf!,
+          owner_secret: OWNER_SECRET,
+        }),
+      }),
+      env,
+    )
+    expect(rejected?.status).toBe(400)
+    expect(await rejected?.json()).toMatchObject({
+      error: 'invalid_request',
+      error_description: 'Authorization request origin is invalid.',
+    })
+  })
+
   it('publishes OAuth 2.1 discovery metadata', async () => {
     const resource = await handleOAuthRequest(
       new Request('https://canvas-mcp-cf.brycel.net/.well-known/oauth-protected-resource/mcp'),

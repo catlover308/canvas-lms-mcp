@@ -564,6 +564,10 @@ async function authorizePost(request: Request, secret: string): Promise<Response
   if (!csrf || !(await constantTimeEqual(csrf, consent.csrf))) {
     return oauthError('invalid_request', 'Authorization session is invalid or expired.')
   }
+  const origin = request.headers.get('origin')
+  if (origin && origin !== CANONICAL_ORIGIN && origin !== LEGACY_ORIGIN && origin !== 'null') {
+    return oauthError('invalid_request', 'Authorization request origin is invalid.')
+  }
   if (!(await constantTimeEqual(form.get('owner_secret') ?? '', secret))) {
     return new Response('Authorization denied', {
       status: 403,
