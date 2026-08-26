@@ -43,6 +43,11 @@ async function authorize(clientId: string): Promise<{ code: string }> {
   expect(html).toContain('six read-only student tools')
   expect(html).toContain('No Canvas write tools are available')
   expect(html).not.toContain('all 165 Canvas tools')
+  expect(html).toContain('data-bwignore="true"')
+  expect(html).toContain('formmethod="post"')
+  expect(page!.headers.get('content-security-policy')).toContain(
+    'form-action https://canvas-mcp-cf.brycel.net https://canvas-mcp.brycel.net',
+  )
   const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
   const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
   expect(consentToken).toBeTruthy()

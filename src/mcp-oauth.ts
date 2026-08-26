@@ -312,15 +312,14 @@ body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding
 <p><strong>${escapeHtml(client.clientName)}</strong> is requesting access to the Canvas MCP server.</p>
 <p class="muted">Callback: <code>${escapeHtml(redirectHost)}</code>. This server exposes six read-only student tools for the configured Pasadena Canvas account. No Canvas write tools are available.</p>
 <form method="post" action="${CANONICAL_ORIGIN}/oauth/authorize"><input type="hidden" name="consent_token" value="${escapeHtml(consentToken)}"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><label for="owner_secret">Owner secret</label>
-<input id="owner_secret" name="owner_secret" type="password" autocomplete="current-password" required autofocus>
-<button type="submit">Authorize client</button></form></main></body></html>`
+<input id="owner_secret" name="owner_secret" type="password" autocomplete="off" data-bwignore="true" data-1p-ignore required autofocus>
+<button type="submit" formmethod="post" formaction="${CANONICAL_ORIGIN}/oauth/authorize">Authorize client</button></form></main></body></html>`
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy':
-        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action ${CANONICAL_ORIGIN} ${LEGACY_ORIGIN}; frame-ancestors 'none'; base-uri 'none'`,
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
