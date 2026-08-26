@@ -2,19 +2,15 @@ import { McpServer } from '@modelcontextprotocol/server'
 import { createMcpHandler } from 'agents/mcp/server'
 import { version } from '../package.json'
 import { CanvasClient } from './canvas'
-import { registerCanvasResources } from './resources/canvas'
-import { registerInstitutionCanvasResources } from './resources/institutions'
 import { isAuthorizedMcpRequest, stripMcpAuthorization, unauthorizedMcpResponse } from './mcp-auth'
 import { applyMcpRequestCompatibility, applyMcpResponseCompatibility } from './mcp-compat'
 import { handleOAuthRequest } from './mcp-oauth'
-import { registerMultiInstitutionTools } from './worker-tools'
-
-type OptionalCanyonsSecret = Partial<Record<'CANVAS_COC_API_TOKEN', string>>
-
-function readCanyonsToken(env: Cloudflare.Env): string | undefined {
-  const token = (env as Cloudflare.Env & OptionalCanyonsSecret).CANVAS_COC_API_TOKEN
-  return token?.trim() || undefined
-}
+import {
+  registerCanvasCloudTools,
+  WORKER_CONTRACT_VERSION,
+  WORKER_SOURCE_REPOSITORY,
+  WORKER_TOOL_NAMES,
+} from './worker-tools'
 
 function normalizeCanvasBaseUrl(value: string): string {
   const url = new URL(value)
@@ -38,7 +34,6 @@ export function hasValidWorkerConfiguration(env: Cloudflare.Env): boolean {
   }
   try {
     normalizeCanvasBaseUrl(env.CANVAS_BASE_URL)
-    normalizeCanvasBaseUrl(env.CANVAS_COC_BASE_URL)
     return true
   } catch {
     return false
@@ -53,20 +48,8 @@ export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
     token: env.CANVAS_API_TOKEN,
     baseUrl: normalizeCanvasBaseUrl(env.CANVAS_BASE_URL),
   })
-  const canyonsToken = readCanyonsToken(env)
-  const canyons = canyonsToken
-    ? new CanvasClient({
-        token: canyonsToken,
-        baseUrl: normalizeCanvasBaseUrl(env.CANVAS_COC_BASE_URL),
-      })
-    : undefined
   const server = new McpServer({ name: 'canvas-lms-mcp', version })
-
-  registerMultiInstitutionTools(server, { pasadena, canyons })
-  // Preserve the upstream Pasadena resource URIs and add explicit,
-  // institution-qualified resources for both Canvas origins.
-  registerCanvasResources(server, pasadena)
-  registerInstitutionCanvasResources(server, { pasadena, canyons })
+  registerCanvasCloudTools(server, pasadena)
   return server
 }
 
@@ -85,11 +68,11 @@ export default {
         {
           ok: configured,
           service: 'canvas-lms-mcp',
+          contract: WORKER_CONTRACT_VERSION,
+          tools: [...WORKER_TOOL_NAMES],
+          source: WORKER_SOURCE_REPOSITORY,
           oauth: env.OWNER_SECRET?.length >= 32 ? 'configured' : 'unavailable',
-          institutions: {
-            pasadena: env.CANVAS_API_TOKEN ? 'configured' : 'unavailable',
-            canyons: readCanyonsToken(env) ? 'configured' : 'dormant',
-          },
+          institution: env.CANVAS_API_TOKEN ? 'pasadena' : 'unavailable',
         },
         { status: configured ? 200 : 503 },
       )

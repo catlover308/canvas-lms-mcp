@@ -22,6 +22,10 @@ export class PagesModule {
     )
   }
 
+  async getFrontPage(courseId: number): Promise<CanvasPage> {
+    return this.client.request<CanvasPage>(`/api/v1/courses/${courseId}/front_page`)
+  }
+
   /**
    * List every page in a course with its full HTML `body`. The paginated list
    * endpoint returns page stubs without `body`, so this fans out a `get()` per

@@ -2,95 +2,94 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { CanvasClient } from '../src/canvas'
-import { registerMultiInstitutionTools } from '../src/worker-tools'
+import { registerCanvasCloudTools, WORKER_TOOL_NAMES } from '../src/worker-tools'
 
 type ToolResponse = {
   content: Array<{ type: 'text'; text: string }>
   isError?: boolean
 }
 
-describe('multi-institution Worker tool registry', () => {
-  function captureRegistry() {
-    const handlers = new Map<string, (params: Record<string, unknown>) => Promise<ToolResponse>>()
-    const configs = new Map<string, { inputSchema: z.ZodType }>()
-    const server = {
-      registerTool: (name: string, config: { inputSchema: z.ZodType }, handler: unknown) => {
-        configs.set(name, config)
-        handlers.set(name, handler as (params: Record<string, unknown>) => Promise<ToolResponse>)
-      },
-    } as unknown as McpServer
+type ToolConfig = {
+  inputSchema: z.ZodType
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean }
+}
 
-    const pasadena = new CanvasClient({
-      token: 'pasadena-token',
-      baseUrl: 'https://canvas.pasadena.edu',
-    })
-    const canyons = new CanvasClient({
-      token: 'canyons-token',
-      baseUrl: 'https://coc.instructure.com',
-    })
-    const pasadenaHealth = vi.spyOn(pasadena.users, 'getProfile').mockResolvedValue({ id: 1 })
-    const canyonsHealth = vi.spyOn(canyons.users, 'getProfile').mockResolvedValue({ id: 2 })
-    const canyonsCreateAssignment = vi
-      .spyOn(canyons.assignments, 'create')
-      .mockResolvedValue({ id: 99, name: 'Essay' } as never)
+function captureRegistry() {
+  const handlers = new Map<string, (params: Record<string, unknown>) => Promise<ToolResponse>>()
+  const configs = new Map<string, ToolConfig>()
+  const server = {
+    registerTool: (name: string, config: ToolConfig, handler: unknown) => {
+      configs.set(name, config)
+      handlers.set(name, handler as (params: Record<string, unknown>) => Promise<ToolResponse>)
+    },
+  } as unknown as McpServer
+  const canvas = new CanvasClient({
+    token: 'pasadena-token',
+    baseUrl: 'https://canvas.pasadena.edu',
+  })
+  registerCanvasCloudTools(server, canvas)
+  return { canvas, configs, handlers }
+}
 
-    registerMultiInstitutionTools(server, { pasadena, canyons })
-    return { handlers, configs, pasadenaHealth, canyonsHealth, canyonsCreateAssignment }
-  }
+describe('Canvas Cloud Worker tool registry', () => {
+  it('exposes exactly the six client-contract tools, all read-only', () => {
+    const { configs, handlers } = captureRegistry()
 
-  it('keeps one 165-tool registry and adds the institution selector to every schema', () => {
-    const { handlers, configs } = captureRegistry()
-    expect(handlers.size).toBe(165)
-    expect(configs.size).toBe(165)
-
+    expect([...handlers.keys()]).toEqual([...WORKER_TOOL_NAMES])
+    expect([...configs.keys()]).toEqual([...WORKER_TOOL_NAMES])
     for (const [name, config] of configs) {
-      const institution = (config.inputSchema as z.ZodObject).shape.institution as z.ZodType
-      expect(institution, name).toBeDefined()
-      expect(institution.parse(undefined), name).toBe('pasadena')
-      expect(institution.parse('canyons'), name).toBe('canyons')
+      expect(config.annotations?.readOnlyHint, name).toBe(true)
+      expect(config.annotations?.destructiveHint, name).toBe(false)
+      expect((config.inputSchema as z.ZodObject).shape.institution, name).toBeUndefined()
     }
   })
 
-  it('defaults calls to Pasadena and routes institution="canyons" to its isolated client', async () => {
-    const { handlers, pasadenaHealth, canyonsHealth } = captureRegistry()
-    const health = handlers.get('health_check')
-    expect(health).toBeDefined()
-
-    await health!({})
-    expect(pasadenaHealth).toHaveBeenCalledOnce()
-    expect(canyonsHealth).not.toHaveBeenCalled()
-
-    await health!({ institution: 'canyons' })
-    expect(pasadenaHealth).toHaveBeenCalledOnce()
-    expect(canyonsHealth).toHaveBeenCalledOnce()
-  })
-
-  it('consumes the institution selector instead of leaking it into Canvas payloads', async () => {
-    const { handlers, canyonsCreateAssignment } = captureRegistry()
-    const createAssignment = handlers.get('create_assignment')
-    expect(createAssignment).toBeDefined()
-
-    await createAssignment!({ institution: 'canyons', course_id: 42, name: 'Essay' })
-    expect(canyonsCreateAssignment).toHaveBeenCalledWith(42, { name: 'Essay' })
-  })
-
-  it('keeps all tools discoverable and returns an explicit error while Canyons is dormant', async () => {
-    const handlers = new Map<string, (params: Record<string, unknown>) => Promise<ToolResponse>>()
-    const server = {
-      registerTool: (name: string, _config: unknown, handler: unknown) => {
-        handlers.set(name, handler as (params: Record<string, unknown>) => Promise<ToolResponse>)
+  it('resolves a human course code before reading assignments', async () => {
+    const { canvas, handlers } = captureRegistry()
+    vi.spyOn(canvas.courses, 'list').mockResolvedValue([
+      {
+        id: 42,
+        name: 'College 1',
+        course_code: 'COLL 001',
+        workflow_state: 'available',
       },
-    } as unknown as McpServer
-    const pasadena = new CanvasClient({
-      token: 'pasadena-token',
-      baseUrl: 'https://canvas.pasadena.edu',
+    ] as never)
+    const assignments = vi.spyOn(canvas.assignments, 'list').mockResolvedValue([
+      {
+        id: 9,
+        course_id: 42,
+        name: 'Orientation',
+        description: null,
+        due_at: null,
+        points_possible: 10,
+        grading_type: 'points',
+        submission_types: ['online_text_entry'],
+        allowed_attempts: -1,
+      },
+    ] as never)
+
+    const result = await handlers.get('list_assignments')!({ course_identifier: 'coll 001' })
+
+    expect(result.isError).not.toBe(true)
+    expect(assignments).toHaveBeenCalledWith(42, { include: ['submission'] })
+    expect(JSON.parse(result.content[0]!.text)).toEqual([
+      expect.objectContaining({ id: 9, course_id: 42, name: 'Orientation' }),
+    ])
+  })
+
+  it('fails closed when a course code is ambiguous', async () => {
+    const { canvas, handlers } = captureRegistry()
+    vi.spyOn(canvas.courses, 'list').mockResolvedValue([
+      { id: 1, name: 'College 1 A', course_code: 'COLL 001', workflow_state: 'available' },
+      { id: 2, name: 'College 1 B', course_code: 'COLL 001', workflow_state: 'available' },
+    ] as never)
+
+    const result = await handlers.get('get_course_summary')!({
+      course_identifier: 'COLL 001',
+      detail: 'compact',
     })
 
-    registerMultiInstitutionTools(server, { pasadena })
-
-    expect(handlers.size).toBe(165)
-    const result = await handlers.get('health_check')!({ institution: 'canyons' })
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toContain('Canyons Canvas is dormant')
+    expect(result.content[0]!.text).toContain('ambiguous')
   })
 })

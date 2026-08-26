@@ -40,6 +40,9 @@ async function authorize(clientId: string): Promise<{ code: string; cookie: stri
   const page = await handleOAuthRequest(new Request(url), env)
   expect(page?.status).toBe(200)
   const html = await page!.text()
+  expect(html).toContain('six read-only student tools')
+  expect(html).toContain('No Canvas write tools are available')
+  expect(html).not.toContain('all 165 Canvas tools')
   const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
   const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
   const cookie = page!.headers.get('set-cookie')!.split(';', 1)[0]!

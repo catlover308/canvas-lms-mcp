@@ -322,7 +322,7 @@ function consentPage(
 body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#171717}.card{border:1px solid #d4d4d4;border-radius:.75rem;padding:2rem}label{display:block;margin:1.25rem 0 .4rem}input{box-sizing:border-box;width:100%;padding:.7rem;border:1px solid #a3a3a3;border-radius:.4rem}button{margin-top:1.25rem;padding:.7rem 1rem;border:0;border-radius:.4rem;background:#171717;color:white;font-weight:600}.muted{color:#525252;font-size:.9rem}code{overflow-wrap:anywhere}
 </style></head><body><main class="card"><h1>Authorize Canvas MCP</h1>
 <p><strong>${escapeHtml(client.clientName)}</strong> is requesting access to the Canvas MCP server.</p>
-<p class="muted">Callback: <code>${escapeHtml(redirectHost)}</code>. This server exposes all 165 Canvas tools, including write tools; the client may require confirmation before writes.</p>
+<p class="muted">Callback: <code>${escapeHtml(redirectHost)}</code>. This server exposes six read-only student tools for the configured Pasadena Canvas account. No Canvas write tools are available.</p>
 <form method="post" action="/oauth/authorize"><input type="hidden" name="consent_token" value="${escapeHtml(consentToken)}"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><label for="owner_secret">Owner secret</label>
 <input id="owner_secret" name="owner_secret" type="password" autocomplete="current-password" required autofocus>
 <button type="submit">Authorize client</button></form></main></body></html>`
@@ -423,7 +423,9 @@ function isChatGptConnectorRedirectUri(value: string): boolean {
 }
 
 function resolveChatGptOpaqueClient(clientId: string, redirectUri: string): ResolvedClient | null {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)
+  ) {
     return null
   }
   if (!isChatGptConnectorRedirectUri(redirectUri)) return null
@@ -534,8 +536,7 @@ async function authorizeGet(request: Request, secret: string): Promise<Response>
     return oauthError('invalid_request', 'A valid S256 code challenge is required.')
   }
   const resource = canonicalResource(params.get('resource') ?? MCP_RESOURCE)
-  if (!resource)
-    return oauthError('invalid_target', 'The resource must be this MCP server.')
+  if (!resource) return oauthError('invalid_target', 'The resource must be this MCP server.')
   const scope = normalizeScope(params.get('scope'))
   if (!scope) return oauthError('invalid_scope', 'Unsupported OAuth scope.')
   if (state !== null && state.length > 2_048)
