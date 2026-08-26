@@ -25,7 +25,7 @@ async function register(): Promise<string> {
   return ((await response?.json()) as { client_id: string }).client_id
 }
 
-async function authorize(clientId: string): Promise<{ code: string; cookie: string }> {
+async function authorize(clientId: string): Promise<{ code: string }> {
   const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
   url.search = new URLSearchParams({
     response_type: 'code',
@@ -45,7 +45,6 @@ async function authorize(clientId: string): Promise<{ code: string; cookie: stri
   expect(html).not.toContain('all 165 Canvas tools')
   const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
   const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
-  const cookie = page!.headers.get('set-cookie')!.split(';', 1)[0]!
   expect(consentToken).toBeTruthy()
   expect(csrf).toBeTruthy()
 
@@ -54,7 +53,7 @@ async function authorize(clientId: string): Promise<{ code: string; cookie: stri
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        Cookie: cookie,
+        Origin: 'https://canvas-mcp-cf.brycel.net',
       },
       body: new URLSearchParams({
         consent_token: consentToken!,
@@ -69,7 +68,7 @@ async function authorize(clientId: string): Promise<{ code: string; cookie: stri
   expect(callback.origin + callback.pathname).toBe(redirectUri)
   expect(callback.searchParams.get('state')).toBe('fixed-state')
   expect(callback.searchParams.get('iss')).toBe('https://canvas-mcp-cf.brycel.net')
-  return { code: callback.searchParams.get('code')!, cookie }
+  return { code: callback.searchParams.get('code')! }
 }
 
 describe('stateless OAuth server', () => {
@@ -144,14 +143,12 @@ describe('stateless OAuth server', () => {
     const html = await page!.text()
     const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
     const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
-    const cookie = page!.headers.get('set-cookie')!.split(';', 1)[0]!
-
     const approval = await handleOAuthRequest(
       new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          Cookie: cookie,
+          Origin: 'https://canvas-mcp-cf.brycel.net',
         },
         body: new URLSearchParams({
           consent_token: consentToken!,
@@ -182,6 +179,46 @@ describe('stateless OAuth server', () => {
 
     expect(token?.status).toBe(200)
     expect(await verifyOAuthAccessToken(issued.access_token, OWNER_SECRET)).toBe(true)
+  })
+
+  it('accepts consent approval without cookies and rejects cross-origin approval', async () => {
+    const clientId = await register()
+    const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: MCP_RESOURCE,
+      scope: 'canvas.mcp',
+    }).toString()
+    const page = await handleOAuthRequest(new Request(url), env)
+    const html = await page!.text()
+    const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
+    const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
+    const body = new URLSearchParams({
+      consent_token: consentToken!,
+      csrf: csrf!,
+      owner_secret: OWNER_SECRET,
+    })
+
+    const rejected = await handleOAuthRequest(
+      new Request('https://canvas-mcp-cf.brycel.net/oauth/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://attacker.example',
+        },
+        body,
+      }),
+      env,
+    )
+    expect(rejected?.status).toBe(400)
+    expect(await rejected?.json()).toMatchObject({
+      error: 'invalid_request',
+      error_description: 'Authorization request origin is invalid.',
+    })
   })
 
   it('publishes OAuth 2.1 discovery metadata', async () => {

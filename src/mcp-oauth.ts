@@ -10,7 +10,6 @@ const CODE_TTL_SECONDS = 5 * 60
 const ACCESS_TTL_SECONDS = 60 * 60
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60
 const CONSENT_TTL_SECONDS = 10 * 60
-const CSRF_COOKIE = '__Host-CANVAS_MCP_CSRF'
 
 type TokenKind = 'client' | 'consent' | 'code' | 'access' | 'refresh'
 
@@ -298,17 +297,6 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;')
 }
 
-function cookieValue(request: Request, name: string): string | null {
-  const cookie = request.headers.get('cookie')
-  if (!cookie) return null
-  for (const part of cookie.split(';')) {
-    const separator = part.indexOf('=')
-    if (separator === -1) continue
-    if (part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim()
-  }
-  return null
-}
-
 function consentPage(
   consentToken: string,
   csrf: string,
@@ -323,7 +311,7 @@ body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding
 </style></head><body><main class="card"><h1>Authorize Canvas MCP</h1>
 <p><strong>${escapeHtml(client.clientName)}</strong> is requesting access to the Canvas MCP server.</p>
 <p class="muted">Callback: <code>${escapeHtml(redirectHost)}</code>. This server exposes six read-only student tools for the configured Pasadena Canvas account. No Canvas write tools are available.</p>
-<form method="post" action="/oauth/authorize"><input type="hidden" name="consent_token" value="${escapeHtml(consentToken)}"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><label for="owner_secret">Owner secret</label>
+<form method="post" action="${CANONICAL_ORIGIN}/oauth/authorize"><input type="hidden" name="consent_token" value="${escapeHtml(consentToken)}"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><label for="owner_secret">Owner secret</label>
 <input id="owner_secret" name="owner_secret" type="password" autocomplete="current-password" required autofocus>
 <button type="submit">Authorize client</button></form></main></body></html>`
   return new Response(html, {
@@ -336,7 +324,6 @@ body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'Set-Cookie': `${CSRF_COOKIE}=${csrf}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${CONSENT_TTL_SECONDS}`,
     },
   })
 }
@@ -574,14 +561,12 @@ async function authorizePost(request: Request, secret: string): Promise<Response
   const consent = await verifyToken<ConsentPayload>(consentToken, 'consent', secret)
   if (!consent) return oauthError('invalid_request', 'Authorization request is invalid or expired.')
   const csrf = form.get('csrf') ?? ''
-  const csrfCookie = cookieValue(request, CSRF_COOKIE) ?? ''
-  if (
-    !csrf ||
-    !csrfCookie ||
-    !(await constantTimeEqual(csrf, csrfCookie)) ||
-    !(await constantTimeEqual(csrf, consent.csrf))
-  ) {
+  if (!csrf || !(await constantTimeEqual(csrf, consent.csrf))) {
     return oauthError('invalid_request', 'Authorization session is invalid or expired.')
+  }
+  const origin = request.headers.get('origin')
+  if (origin && origin !== CANONICAL_ORIGIN) {
+    return oauthError('invalid_request', 'Authorization request origin is invalid.')
   }
   if (!(await constantTimeEqual(form.get('owner_secret') ?? '', secret))) {
     return new Response('Authorization denied', {
@@ -610,7 +595,6 @@ async function authorizePost(request: Request, secret: string): Promise<Response
     headers: {
       Location: redirect.toString(),
       'Cache-Control': 'no-store',
-      'Set-Cookie': `${CSRF_COOKIE}=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0`,
     },
   })
 }
