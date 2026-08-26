@@ -73,6 +73,7 @@ async function authorize(clientId: string): Promise<{ code: string }> {
   expect(callback.origin + callback.pathname).toBe(redirectUri)
   expect(callback.searchParams.get('state')).toBe('fixed-state')
   expect(callback.searchParams.get('iss')).toBe('https://canvas-mcp-cf.brycel.net')
+  expect(callback.toString().length).toBeLessThan(512)
   return { code: callback.searchParams.get('code')! }
 }
 

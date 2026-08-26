@@ -40,11 +40,9 @@ interface ConsentPayload extends BaseTokenPayload {
 
 interface AuthorizationCodePayload extends BaseTokenPayload {
   typ: 'code'
-  clientId: string
-  redirectUri: string
-  codeChallenge: string
-  resource: string
-  scope: string
+  b: string
+  p: string
+  s: 0 | 1
 }
 
 interface AccessTokenPayload extends BaseTokenPayload {
@@ -175,6 +173,21 @@ async function constantTimeEqual(left: string, right: string): Promise<boolean> 
     difference |= leftBytes[index]! ^ rightBytes[index]!
   }
   return difference === 0
+}
+
+async function authorizationCodeBinding(
+  clientId: string,
+  redirectUri: string,
+  resource: string,
+  scope: string,
+): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest(
+      'SHA-256',
+      encoder.encode(`${clientId}\0${redirectUri}\0${resource}\0${scope}`),
+    ),
+  )
+  return base64UrlEncode(digest)
 }
 
 async function readBody(request: Request, maxBytes = MAX_BODY_BYTES): Promise<string | null> {
@@ -576,11 +589,14 @@ async function authorizePost(request: Request, secret: string): Promise<Response
   const code = await signToken<AuthorizationCodePayload>(
     'code',
     {
-      clientId: consent.clientId,
-      redirectUri: consent.redirectUri,
-      codeChallenge: consent.codeChallenge,
-      resource: consent.resource,
-      scope: consent.scope,
+      b: await authorizationCodeBinding(
+        consent.clientId,
+        consent.redirectUri,
+        consent.resource,
+        consent.scope,
+      ),
+      p: consent.codeChallenge,
+      s: consent.scope.split(/\s+/).includes(OPTIONAL_OFFLINE_SCOPE) ? 1 : 0,
       exp: nowSeconds() + CODE_TTL_SECONDS,
     },
     secret,
@@ -663,19 +679,20 @@ async function exchangeToken(request: Request, secret: string): Promise<Response
       'code',
       secret,
     )
+    const redirectUri = params.get('redirect_uri') ?? ''
+    const resource = canonicalResource(params.get('resource') ?? MCP_RESOURCE)
+    const scope = code?.s === 1 ? `${OAUTH_SCOPE} ${OPTIONAL_OFFLINE_SCOPE}` : OAUTH_SCOPE
+    if (!code || !resource || (code.s !== 0 && code.s !== 1)) {
+      return oauthError('invalid_grant', 'Authorization code is invalid or expired.')
+    }
+    const binding = await authorizationCodeBinding(clientId, redirectUri, resource, scope)
     if (
-      !code ||
-      code.clientId !== clientId ||
-      code.redirectUri !== (params.get('redirect_uri') ?? '') ||
-      !(await verifyPkce(params.get('code_verifier') ?? '', code.codeChallenge))
+      !(await constantTimeEqual(binding, code.b)) ||
+      !(await verifyPkce(params.get('code_verifier') ?? '', code.p))
     ) {
       return oauthError('invalid_grant', 'Authorization code is invalid or expired.')
     }
-    const resource = canonicalResource(params.get('resource') ?? code.resource)
-    if (resource !== code.resource) {
-      return oauthError('invalid_target', 'The resource must be the one authorized.')
-    }
-    return issueTokens(clientId, resource, code.scope, secret)
+    return issueTokens(clientId, resource, scope, secret)
   }
   if (grantType === 'refresh_token') {
     const refresh = await verifyToken<RefreshTokenPayload>(
