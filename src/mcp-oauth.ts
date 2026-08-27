@@ -316,7 +316,10 @@ function consentPage(
   client: ResolvedClient,
   redirectUri: string,
 ): Response {
-  const redirectHost = new URL(redirectUri).host
+  // Chromium applies form-action to the POST's redirect as well as its action URL.
+  // authorizeGet has already validated this exact callback against the client registration.
+  const redirectUrl = new URL(redirectUri)
+  const redirectHost = redirectUrl.host
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Authorize Canvas MCP</title><style>
@@ -332,7 +335,7 @@ body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action ${CANONICAL_ORIGIN} ${LEGACY_ORIGIN}; frame-ancestors 'none'; base-uri 'none'`,
+      'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action ${CANONICAL_ORIGIN} ${LEGACY_ORIGIN} ${redirectUrl.origin}; frame-ancestors 'none'; base-uri 'none'`,
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',

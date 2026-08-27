@@ -46,7 +46,7 @@ async function authorize(clientId: string): Promise<{ code: string }> {
   expect(html).toContain('data-bwignore="true"')
   expect(html).toContain('formmethod="post"')
   expect(page!.headers.get('content-security-policy')).toContain(
-    'form-action https://canvas-mcp-cf.brycel.net https://canvas-mcp.brycel.net',
+    `form-action https://canvas-mcp-cf.brycel.net https://canvas-mcp.brycel.net ${new URL(redirectUri).origin};`,
   )
   const consentToken = html.match(/name="consent_token" value="([^"]+)"/)?.[1]
   const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1]
@@ -104,6 +104,9 @@ describe('stateless OAuth server', () => {
     const response = await handleOAuthRequest(new Request(url), env)
 
     expect(response?.status).toBe(200)
+    expect(response!.headers.get('content-security-policy')).toContain(
+      'form-action https://canvas-mcp-cf.brycel.net https://canvas-mcp.brycel.net https://chatgpt.com;',
+    )
     expect(fetchMock).toHaveBeenCalledWith(
       new URL(clientId),
       expect.objectContaining({ redirect: 'manual' }),
