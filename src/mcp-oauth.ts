@@ -752,17 +752,23 @@ export async function handleOAuthRequest(
     return json(authorizationServerMetadata())
   }
   if (
-    (url.pathname.startsWith('/oauth/') || url.pathname === '/authorize') &&
+    (url.pathname.startsWith('/oauth/') ||
+      ['/authorize', '/register', '/token'].includes(url.pathname)) &&
     (!env.OWNER_SECRET || env.OWNER_SECRET.length < 32)
   ) {
     return oauthError('temporarily_unavailable', 'OAuth is not configured.', 503)
   }
-  if (url.pathname === '/oauth/register') return registerClient(request, env.OWNER_SECRET)
+  // Existing clients can cache the former server's root-level OAuth endpoints.
+  if (url.pathname === '/oauth/register' || url.pathname === '/register') {
+    return registerClient(request, env.OWNER_SECRET)
+  }
   if (url.pathname === '/oauth/authorize' || url.pathname === '/authorize') {
     if (request.method === 'GET') return authorizeGet(request, env.OWNER_SECRET)
     if (request.method === 'POST') return authorizePost(request, env.OWNER_SECRET)
     return methodNotAllowed('GET, POST')
   }
-  if (url.pathname === '/oauth/token') return exchangeToken(request, env.OWNER_SECRET)
+  if (url.pathname === '/oauth/token' || url.pathname === '/token') {
+    return exchangeToken(request, env.OWNER_SECRET)
+  }
   return null
 }

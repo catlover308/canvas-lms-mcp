@@ -80,6 +80,52 @@ async function authorize(clientId: string): Promise<{ code: string }> {
 describe('stateless OAuth server', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('supports cached legacy registration and token endpoints without relaxing validation', async () => {
+    const registration = await handleOAuthRequest(
+      new Request('https://canvas-mcp-cf.brycel.net/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [redirectUri] }),
+      }),
+      env,
+    )
+    expect(registration?.status).toBe(201)
+    const { client_id: clientId } = (await registration!.json()) as { client_id: string }
+    const { code } = await authorize(clientId)
+    const exchange = (codeVerifier: string) =>
+      handleOAuthRequest(
+        new Request('https://canvas-mcp-cf.brycel.net/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            code,
+            code_verifier: codeVerifier,
+            resource: 'https://canvas-mcp.brycel.net/mcp',
+          }),
+        }),
+        env,
+      )
+    expect((await exchange('b'.repeat(64)))?.status).toBe(400)
+    const response = await exchange(verifier)
+    expect(response?.status).toBe(200)
+    const tokens = (await response!.json()) as { access_token: string }
+    expect(await verifyOAuthAccessToken(tokens.access_token, OWNER_SECRET)).toBe(true)
+  })
+
+  it.each(['/register', '/token'])(
+    'fails closed for the unconfigured legacy endpoint %s',
+    async (path) => {
+      const response = await handleOAuthRequest(
+        new Request(`https://canvas-mcp-cf.brycel.net${path}`, { method: 'POST' }),
+        {} as Cloudflare.Env,
+      )
+      expect(response?.status).toBe(503)
+    },
+  )
+
   it('fetches ChatGPT CIMD metadata without following redirects', async () => {
     const clientId = 'https://chatgpt.com/oauth/test-client/client.json'
     const redirectUri = 'https://chatgpt.com/connector/oauth/test-client'
