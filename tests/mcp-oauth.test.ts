@@ -25,7 +25,11 @@ async function register(): Promise<string> {
   return ((await response?.json()) as { client_id: string }).client_id
 }
 
-async function authorize(clientId: string): Promise<{ code: string }> {
+async function authorize(
+  clientId: string,
+  browser = false,
+  state = 'fixed-state',
+): Promise<{ code: string }> {
   const url = new URL('https://canvas-mcp-cf.brycel.net/oauth/authorize')
   url.search = new URLSearchParams({
     response_type: 'code',
@@ -35,7 +39,7 @@ async function authorize(clientId: string): Promise<{ code: string }> {
     code_challenge_method: 'S256',
     resource: MCP_RESOURCE,
     scope: 'canvas.mcp offline_access',
-    state: 'fixed-state',
+    state,
   }).toString()
   const page = await handleOAuthRequest(new Request(url), env)
   expect(page?.status).toBe(200)
@@ -59,6 +63,7 @@ async function authorize(clientId: string): Promise<{ code: string }> {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Origin: 'https://canvas-mcp-cf.brycel.net',
+        ...(browser ? { Accept: 'text/html,application/xhtml+xml' } : {}),
       },
       body: new URLSearchParams({
         consent_token: consentToken!,
@@ -68,10 +73,27 @@ async function authorize(clientId: string): Promise<{ code: string }> {
     }),
     env,
   )
-  expect(approval?.status).toBe(302)
-  const callback = new URL(approval!.headers.get('location')!)
+  let callback: URL
+  if (browser) {
+    expect(approval?.status).toBe(200)
+    expect(approval!.headers.get('location')).toBeNull()
+    expect(approval!.headers.get('cache-control')).toBe('no-store')
+    expect(approval!.headers.get('referrer-policy')).toBe('no-referrer')
+    const body = await approval!.text()
+    expect(body).toContain('Canvas approval accepted')
+    expect(body).toContain('Continue to client')
+    expect(body).not.toContain(OWNER_SECRET)
+    expect(body).not.toContain(consentToken!)
+    const href = body.match(/<a href="([^"]+)"/)?.[1]
+    expect(href).toBeTruthy()
+    expect(body).toContain(`http-equiv="refresh" content="0;url=${href}"`)
+    callback = new URL(href!.replaceAll('&amp;', '&'))
+  } else {
+    expect(approval?.status).toBe(302)
+    callback = new URL(approval!.headers.get('location')!)
+  }
   expect(callback.origin + callback.pathname).toBe(redirectUri)
-  expect(callback.searchParams.get('state')).toBe('fixed-state')
+  expect(callback.searchParams.get('state')).toBe(state)
   expect(callback.searchParams.get('iss')).toBe('https://canvas-mcp-cf.brycel.net')
   expect(callback.toString().length).toBeLessThan(512)
   return { code: callback.searchParams.get('code')! }
@@ -79,6 +101,29 @@ async function authorize(clientId: string): Promise<{ code: string }> {
 
 describe('stateless OAuth server', () => {
   afterEach(() => vi.restoreAllMocks())
+
+  it.each(['fixed-state', 'codex_scheme__oauth_s_desktop-test'])(
+    'ends browser form navigation before handing off the callback for %s',
+    async (state) => {
+      const clientId = await register()
+      const { code } = await authorize(clientId, true, state)
+      const response = await handleOAuthRequest(
+        new Request('https://canvas-mcp-cf.brycel.net/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            code,
+            code_verifier: verifier,
+          }),
+        }),
+        env,
+      )
+      expect(response?.status).toBe(200)
+    },
+  )
 
   it('supports cached legacy registration and token endpoints without relaxing validation', async () => {
     const registration = await handleOAuthRequest(

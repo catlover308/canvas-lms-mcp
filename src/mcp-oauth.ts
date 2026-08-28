@@ -608,6 +608,26 @@ async function authorizePost(request: Request, secret: string): Promise<Response
   redirect.searchParams.set('code', code)
   if (consent.state) redirect.searchParams.set('state', consent.state)
   redirect.searchParams.set('iss', CANONICAL_ORIGIN)
+  if (request.headers.get('accept')?.includes('text/html')) {
+    // End the form navigation before following the callback. A callback can itself
+    // redirect into a desktop app; carrying form-action through that chain blocks it.
+    const callback = escapeHtml(redirect.toString())
+    return new Response(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${callback}"><title>Canvas approval accepted</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem}a{display:inline-block;padding:.7rem 1rem;background:#171717;color:white;border-radius:.4rem}</style></head><body><main><h1>Canvas approval accepted</h1><p>Returning to your client to finish connecting. If the app does not open automatically, use the link below.</p><a href="${callback}" rel="noreferrer">Continue to client</a></main></body></html>`,
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy':
+            "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
+          'Referrer-Policy': 'no-referrer',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+        },
+      },
+    )
+  }
   return new Response(null, {
     status: 302,
     headers: {

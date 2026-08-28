@@ -56,10 +56,6 @@ export function createCanvasWorkerServer(env: Cloudflare.Env): McpServer {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
-    if (url.hostname === 'canvas-mcp.brycel.net') {
-      url.hostname = 'canvas-mcp-cf.brycel.net'
-      return Response.redirect(url.toString(), 308)
-    }
     const oauthResponse = await handleOAuthRequest(request, env)
     if (oauthResponse) return oauthResponse
     if (url.pathname === '/health') {

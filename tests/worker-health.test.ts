@@ -64,6 +64,66 @@ describe('Worker health configuration', () => {
     expect(response.headers.get('www-authenticate')).toContain('resource_metadata=')
   })
 
+  it('serves authenticated MCP initialization on the legacy hostname without redirecting', async () => {
+    const response = await worker.fetch(
+      new Request('https://canvas-mcp.brycel.net/mcp', {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${validEnv.MCP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'legacy-host-regression', version: '1.0.0' },
+          },
+        }),
+      }),
+      validEnv,
+      executionContext,
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.status >= 300 && response.status < 400).toBe(false)
+    expect((await response.json()) as { result?: unknown }).toHaveProperty('result')
+  })
+
+  it('denies unauthenticated MCP requests on the legacy hostname without redirecting', async () => {
+    const response = await worker.fetch(
+      new Request('https://canvas-mcp.brycel.net/mcp', {
+        method: 'POST',
+        redirect: 'manual',
+      }),
+      validEnv,
+      executionContext,
+    )
+
+    expect(response.status).toBe(401)
+    expect(response.status >= 300 && response.status < 400).toBe(false)
+  })
+
+  it('serves the legacy root token endpoint without redirecting', async () => {
+    const response = await worker.fetch(
+      new Request('https://canvas-mcp.brycel.net/token', {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=authorization_code',
+      }),
+      validEnv,
+      executionContext,
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.status >= 300 && response.status < 400).toBe(false)
+  })
+
   it('advertises exactly the public six-tool read-only contract over MCP', async () => {
     const response = await worker.fetch(
       new Request('https://canvas-mcp-cf.brycel.net/mcp', {
